@@ -796,7 +796,6 @@ document.getElementById('dupPageBtn').onclick = ()=>duplicatePage(currentPageId)
 document.getElementById('delPageBtn').onclick = ()=>{ if(confirm('删除这一页?')) deletePage(currentPageId); };
 document.getElementById('changeTemplateBtn').onclick = ()=>{
   const p = currentPage(); if(!p) return;
-  if(Object.keys(p.images).length && !confirm('更换模板会清空本页已放的照片,确定继续?')) return;
   openVariantModalForReplace(p.count, p);
 };
 function openVariantModalForReplace(n, page){
@@ -811,10 +810,8 @@ function openVariantModalForReplace(n, page){
     const name=document.createElement('span'); name.className='vname'; name.textContent=v.name;
     item.appendChild(mini); item.appendChild(name);
     item.onclick=()=>{
-      const oldKeys = Object.keys(page.images);
       const tree = cloneTree(v.tree); assignIds(tree);
-      page.tree = tree; page.images = {};
-      oldKeys.forEach(leafKey=>{ idbDelete('images', page.id+'__'+leafKey).catch(console.error); });
+      page.tree = tree;
       document.body.removeChild(mask); renderEditor(); renderPageList();
       scheduleSave();
     };

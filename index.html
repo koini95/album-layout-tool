@@ -83,6 +83,10 @@
   .cell-inner.has-image{cursor:grab;touch-action:none;}
   .cell-inner.has-image:active{cursor:grabbing;}
   .cell-inner .empty-mark{font-size:11px;color:#b9b3a4;font-family:'IBM Plex Mono',monospace;text-align:center;}
+  .cell-inner.drop-target{outline:3px solid var(--accent);outline-offset:-3px;background:var(--accent-soft);}
+  .drag-ghost{position:fixed;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:8px;overflow:hidden;
+    pointer-events:none;z-index:200;box-shadow:0 6px 18px #00000055;border:2px solid #fff;opacity:.92;}
+  .drag-ghost img{width:100%;height:100%;object-fit:cover;display:block;}
   .cell-clear,.cell-replace{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
     width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
   .cell-clear{right:4px;}
@@ -544,6 +548,21 @@ function renderEditor(){
 
 function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
 
+/* 交换同一页内两个格子的照片(目标为空则等于移动过去) */
+function swapPageImages(page, aId, bId){
+  const a = page.images[aId], b = page.images[bId];
+  if(a) page.images[bId] = a; else delete page.images[bId];
+  if(b) page.images[aId] = b; else delete page.images[aId];
+  const pid = page.id;
+  (async ()=>{
+    try{
+      if(a) await idbPut('images', pid+'__'+bId, a.file); else await idbDelete('images', pid+'__'+bId);
+      if(b) await idbPut('images', pid+'__'+aId, b.file); else await idbDelete('images', pid+'__'+aId);
+    }catch(err){ console.error(err); }
+  })();
+  scheduleSave();
+}
+
 /* 计算"覆盖式"填充下,图片在容器中的显示尺寸与位置(支持额外缩放 scale 与拖拽偏移 panFrac) */
 function coverGeom(containerW, containerH, mediaW, mediaH, userScale, panFracX, panFracY){
   const base = Math.max(containerW/mediaW, containerH/mediaH);
@@ -565,6 +584,7 @@ function renderNode(node, page, interactive){
     inner.style.margin = gapPct + '%';
     inner.style.width = `calc(100% - ${gapPct*2}%)`;
     inner.style.height = `calc(100% - ${gapPct*2}%)`;
+    inner.dataset.leafId = node.id;
     const imgData = page.images[node.id];
     if(imgData){
       inner.classList.add('has-image');
@@ -584,7 +604,7 @@ function renderNode(node, page, interactive){
       else im.onload = doLayout;
 
       if(interactive){
-        // 拖拽平移(支持鼠标与触屏)
+        // 拖拽平移(支持鼠标与触屏);拖出格子边界则改为拖动照片去交换位置
         inner.addEventListener('pointerdown', (e)=>{
           if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace')) return;
           e.preventDefault();
@@ -594,19 +614,60 @@ function renderNode(node, page, interactive){
           inner.setPointerCapture(e.pointerId);
           const startX = e.clientX, startY = e.clientY;
           const g0 = coverGeom(cw,ch,nw,nh, imgData.scale, imgData.panFracX, imgData.panFracY);
-          let dragged = false;
+          const sourceRect = inner.getBoundingClientRect();
+          let dragged = false, swapMode = false, ghost = null, currentTarget = null;
+
+          function enterSwapMode(){
+            swapMode = true;
+            ghost = document.createElement('div');
+            ghost.className = 'drag-ghost';
+            const gimg = document.createElement('img');
+            gimg.src = imgData.url;
+            ghost.appendChild(gimg);
+            document.body.appendChild(ghost);
+          }
+          function setHighlight(el){
+            if(el && el !== inner){
+              if(currentTarget && currentTarget !== el) currentTarget.classList.remove('drop-target');
+              currentTarget = el; currentTarget.classList.add('drop-target');
+            } else {
+              if(currentTarget) currentTarget.classList.remove('drop-target');
+              currentTarget = null;
+            }
+          }
           function onMove(ev){
             dragged = true;
-            const dx = ev.clientX-startX, dy = ev.clientY-startY;
-            const newLeft = g0.left+dx, newTop = g0.top+dy;
-            imgData.panFracX = g0.slackX!==0 ? clamp((newLeft+g0.slackX/2)/(g0.slackX/2), -1, 1) : 0;
-            imgData.panFracY = g0.slackY!==0 ? clamp((newTop+g0.slackY/2)/(g0.slackY/2), -1, 1) : 0;
-            doLayout();
+            if(!swapMode){
+              const margin = 6;
+              const outside = ev.clientX < sourceRect.left-margin || ev.clientX > sourceRect.right+margin ||
+                               ev.clientY < sourceRect.top-margin || ev.clientY > sourceRect.bottom+margin;
+              if(outside){ enterSwapMode(); }
+              else {
+                const dx = ev.clientX-startX, dy = ev.clientY-startY;
+                const newLeft = g0.left+dx, newTop = g0.top+dy;
+                imgData.panFracX = g0.slackX!==0 ? clamp((newLeft+g0.slackX/2)/(g0.slackX/2), -1, 1) : 0;
+                imgData.panFracY = g0.slackY!==0 ? clamp((newTop+g0.slackY/2)/(g0.slackY/2), -1, 1) : 0;
+                doLayout();
+                return;
+              }
+            }
+            ghost.style.left = ev.clientX+'px'; ghost.style.top = ev.clientY+'px';
+            const el = document.elementFromPoint(ev.clientX, ev.clientY);
+            setHighlight(el && el.closest ? el.closest('.cell-inner') : null);
           }
           function onUp(ev){
             inner.removeEventListener('pointermove', onMove);
             inner.removeEventListener('pointerup', onUp);
             try{ inner.releasePointerCapture(ev.pointerId); }catch(err){}
+            if(swapMode){
+              if(currentTarget){
+                const targetLeafId = parseInt(currentTarget.dataset.leafId, 10);
+                if(!Number.isNaN(targetLeafId) && targetLeafId !== node.id) swapPageImages(page, node.id, targetLeafId);
+                currentTarget.classList.remove('drop-target');
+              }
+              ghost.remove();
+              renderEditor(); renderPageList();
+            }
             if(dragged) scheduleSave();
           }
           inner.addEventListener('pointermove', onMove);
@@ -796,7 +857,6 @@ document.getElementById('dupPageBtn').onclick = ()=>duplicatePage(currentPageId)
 document.getElementById('delPageBtn').onclick = ()=>{ if(confirm('删除这一页?')) deletePage(currentPageId); };
 document.getElementById('changeTemplateBtn').onclick = ()=>{
   const p = currentPage(); if(!p) return;
-  if(Object.keys(p.images).length && !confirm('更换模板会清空本页已放的照片,确定继续?')) return;
   openVariantModalForReplace(p.count, p);
 };
 function openVariantModalForReplace(n, page){
@@ -811,10 +871,8 @@ function openVariantModalForReplace(n, page){
     const name=document.createElement('span'); name.className='vname'; name.textContent=v.name;
     item.appendChild(mini); item.appendChild(name);
     item.onclick=()=>{
-      const oldKeys = Object.keys(page.images);
       const tree = cloneTree(v.tree); assignIds(tree);
-      page.tree = tree; page.images = {};
-      oldKeys.forEach(leafKey=>{ idbDelete('images', page.id+'__'+leafKey).catch(console.error); });
+      page.tree = tree;
       document.body.removeChild(mask); renderEditor(); renderPageList();
       scheduleSave();
     };

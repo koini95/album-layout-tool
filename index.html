@@ -232,7 +232,7 @@
       <div style="flex:1;"></div>
       <div class="group">
         <button class="btn secondary small" id="overviewBtn">画册总览</button>
-        <button class="btn secondary small" id="exportPngBtn">导出本页 PNG</button>
+        <button class="btn secondary small" id="exportJpgBtn">导出本页 JPEG</button>
         <button class="btn small" id="exportPdfBtn">导出全部为 PDF</button>
       </div>
     </div>
@@ -939,15 +939,15 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
 }
 
 /* ====================== 导出按钮 ====================== */
-document.getElementById('exportPngBtn').onclick = async ()=>{
+document.getElementById('exportJpgBtn').onclick = async ()=>{
   const page = currentPage(); if(!page) return;
   try{
     const pxPerMM = book.dpi/25.4;
     const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
     const canvas = await renderPageToCanvas(page, wPx, hPx, pxPerMM);
     const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = `page-${pages.indexOf(page)+1}.png`;
+    a.href = canvas.toDataURL('image/jpeg', 0.95);
+    a.download = `page-${pages.indexOf(page)+1}.jpg`;
     a.click();
   } catch(err){
     alert('导出失败: ' + err.message);

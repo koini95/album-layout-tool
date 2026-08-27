@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --ink:#1c1f24;
@@ -233,6 +234,7 @@
       <div class="group">
         <button class="btn secondary small" id="overviewBtn">画册总览</button>
         <button class="btn secondary small" id="exportJpgBtn">导出本页 JPEG</button>
+        <button class="btn secondary small" id="exportAllJpgBtn">导出全部为 JPEG</button>
         <button class="btn small" id="exportPdfBtn">导出全部为 PDF</button>
       </div>
     </div>
@@ -970,6 +972,75 @@ function updateProgress(i, total){
 function hideProgress(){
   const mask = document.getElementById('progressMask');
   if(mask) document.body.removeChild(mask);
+}
+
+/* ---- 整册导出为 JPEG(逐页,打包成一个 zip) ---- */
+document.getElementById('exportAllJpgBtn').onclick = openExportAllJpgModal;
+function openExportAllJpgModal(){
+  if(!pages.length){ alert('还没有页面可导出。'); return; }
+  const digits = Math.max(3, String(pages.length).length);
+  const mask = document.createElement('div'); mask.className = 'modal-mask';
+  const modal = document.createElement('div'); modal.className = 'modal';
+  modal.innerHTML = `
+    <h3>整册导出为 JPEG</h3>
+    <div class="field-row"><label>文件名前缀</label><input id="jpgPrefixInput" type="text" value="page-" style="width:130px;"></div>
+    <div class="hint">共 ${pages.length} 页,将打包为一个 zip,每页一张 JPEG,文件名依次编号,例如:<br><b id="jpgPrefixPreview"></b></div>
+  `;
+  const prefixInput = modal.querySelector('#jpgPrefixInput');
+  const preview = modal.querySelector('#jpgPrefixPreview');
+  function updatePreview(){
+    const prefix = sanitizePrefix(prefixInput.value);
+    preview.textContent = prefix + '1'.padStart(digits,'0') + '.jpg';
+  }
+  prefixInput.oninput = updatePreview;
+  updatePreview();
+  const btnRow = document.createElement('div'); btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn secondary small'; cancelBtn.textContent = '取消';
+  cancelBtn.onclick = ()=>document.body.removeChild(mask);
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn small'; confirmBtn.textContent = '开始导出';
+  confirmBtn.onclick = async ()=>{
+    const prefix = sanitizePrefix(prefixInput.value);
+    document.body.removeChild(mask);
+    await exportAllPagesAsJpgZip(prefix, digits);
+  };
+  btnRow.appendChild(cancelBtn); btnRow.appendChild(confirmBtn);
+  modal.appendChild(btnRow);
+  mask.appendChild(modal);
+  mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
+  document.body.appendChild(mask);
+}
+function sanitizePrefix(v){
+  return (v || '').replace(/[\\/:*?"<>|]/g, '').trim() || 'page-';
+}
+async function exportAllPagesAsJpgZip(prefix, digits){
+  showProgress();
+  await new Promise(r=>setTimeout(r,30));
+  try{
+    const zip = new JSZip();
+    const pxPerMM = book.dpi/25.4;
+    const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
+    for(let i=0;i<pages.length;i++){
+      updateProgress(i+1, pages.length);
+      await new Promise(r=>setTimeout(r,0));
+      const canvas = await renderPageToCanvas(pages[i], wPx, hPx, pxPerMM);
+      const blob = await new Promise(resolve=>canvas.toBlob(resolve, 'image/jpeg', 0.95));
+      zip.file(prefix + String(i+1).padStart(digits,'0') + '.jpg', blob);
+    }
+    const progressText = document.getElementById('progressText');
+    if(progressText) progressText.textContent = '正在打包 zip…';
+    const zipBlob = await zip.generateAsync({ type:'blob' });
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(zipBlob);
+    a.href = url;
+    a.download = `${prefix}相册.zip`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+  } catch(err){
+    alert('导出失败: ' + err.message);
+    console.error(err);
+  } finally {
+    hideProgress();
+  }
 }
 
 document.getElementById('exportPdfBtn').onclick = async ()=>{

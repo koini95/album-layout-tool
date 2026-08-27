@@ -903,6 +903,16 @@ function computeRects(node, x, y, w, h, out){
     computeRects(node.b, x, y+ha, w, h-ha, out);
   }
 }
+/* 用 <img> 解码而非 createImageBitmap:iOS Safari 对某些照片(如 iPhone 拍摄的
+   HEIC 格式)用 createImageBitmap 读取会失败,但 <img> 标签能正常显示,导出时走同一条路径更可靠 */
+function loadImageElement(url){
+  return new Promise((resolve, reject)=>{
+    const el = new Image();
+    el.onload = ()=>resolve(el);
+    el.onerror = ()=>reject(new Error('图片解码失败'));
+    el.src = url;
+  });
+}
 async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
   const canvas = document.createElement('canvas');
   canvas.width = wPx; canvas.height = hPx;
@@ -916,11 +926,10 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
     const rx = r.x+gapPx/2, ry = r.y+gapPx/2, rw = Math.max(1,r.w-gapPx), rh = Math.max(1,r.h-gapPx);
     const img = page.images[leafId];
     if(img){
-      const bitmap = await createImageBitmap(img.file);
-      const g = coverGeom(rw, rh, bitmap.width, bitmap.height, img.scale, img.panFracX, img.panFracY);
+      const el = await loadImageElement(img.url);
+      const g = coverGeom(rw, rh, el.naturalWidth, el.naturalHeight, img.scale, img.panFracX, img.panFracY);
       const sx = -g.left/g.scale, sy = -g.top/g.scale, sw = rw/g.scale, sh = rh/g.scale;
-      ctx.drawImage(bitmap, sx, sy, sw, sh, rx, ry, rw, rh);
-      bitmap.close && bitmap.close();
+      ctx.drawImage(el, sx, sy, sw, sh, rx, ry, rw, rh);
     } else {
       ctx.fillStyle = '#e4e1d9';
       ctx.fillRect(rx,ry,rw,rh);
@@ -932,13 +941,18 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
 /* ====================== 导出按钮 ====================== */
 document.getElementById('exportPngBtn').onclick = async ()=>{
   const page = currentPage(); if(!page) return;
-  const pxPerMM = book.dpi/25.4;
-  const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
-  const canvas = await renderPageToCanvas(page, wPx, hPx, pxPerMM);
-  const a = document.createElement('a');
-  a.href = canvas.toDataURL('image/png');
-  a.download = `page-${pages.indexOf(page)+1}.png`;
-  a.click();
+  try{
+    const pxPerMM = book.dpi/25.4;
+    const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
+    const canvas = await renderPageToCanvas(page, wPx, hPx, pxPerMM);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `page-${pages.indexOf(page)+1}.png`;
+    a.click();
+  } catch(err){
+    alert('导出失败: ' + err.message);
+    console.error(err);
+  }
 };
 
 function showProgress(){

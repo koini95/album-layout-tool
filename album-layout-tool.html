@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>相册排版工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#1c1f24;
+    --paper:#f6f5f2;
+    --panel:#ffffff;
+    --line:#e2dfd8;
+    --accent:#2f5d50;
+    --accent-soft:#e4ece9;
+    --danger:#a8432f;
+    --muted:#8a8579;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:var(--paper);color:var(--ink);}
+  .app{display:flex;height:100vh;}
+  /* ---------- 左侧栏 ---------- */
+  .sidebar{width:280px;flex:0 0 280px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;overflow:hidden;}
+  .sidebar-section{padding:16px 18px;border-bottom:1px solid var(--line);}
+  .sidebar-section h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 10px;font-weight:600;}
+  .field-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+  .field-row label{font-size:12.5px;color:var(--ink);flex:1;}
+  .field-row input{width:64px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+    border:1px solid var(--line);border-radius:5px;padding:5px 6px;background:var(--paper);}
+  .page-list{flex:1;overflow-y:auto;padding:8px 10px;}
+  .page-item{display:flex;align-items:center;gap:8px;padding:8px 8px;border-radius:8px;cursor:pointer;
+    border:1px solid transparent;margin-bottom:4px;}
+  .page-item:hover{background:var(--accent-soft);}
+  .page-item.active{background:var(--accent-soft);border-color:var(--accent);}
+  .page-item .idx{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);width:28px;}
+  .page-item .meta{flex:1;font-size:12.5px;}
+  .page-item .meta small{display:block;color:var(--muted);font-size:10.5px;margin-top:1px;}
+  .icon-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;
+    padding:3px 5px;border-radius:4px;line-height:1;}
+  .icon-btn:hover{background:#0000000d;color:var(--ink);}
+  .add-page-box{padding:14px 16px;border-top:1px solid var(--line);background:#fbfaf8;}
+  .count-grid{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .count-btn{width:34px;height:30px;border:1px solid var(--line);background:var(--panel);
+    border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;cursor:pointer;}
+  .count-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn{border:1px solid var(--accent);background:var(--accent);color:#fff;padding:7px 12px;
+    border-radius:6px;font-size:12.5px;cursor:pointer;font-weight:500;}
+  .btn:hover{opacity:.9;}
+  .btn.secondary{background:transparent;color:var(--accent);}
+  .btn.small{padding:5px 9px;font-size:11.5px;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;}
+  /* ---------- 主区 ---------- */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .toolbar{padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .toolbar .group{display:flex;align-items:center;gap:6px;}
+  .toolbar .sep{width:1px;height:22px;background:var(--line);}
+  .toolbar select, .toolbar input[type=number]{border:1px solid var(--line);border-radius:5px;
+    padding:5px 7px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;background:var(--paper);}
+  .switch{display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;user-select:none;}
+  .switch input{accent-color:var(--accent);}
+  .canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:30px;}
+  .page-frame{background:#fff;box-shadow:0 4px 24px #0000001a;position:relative;}
+  .split{display:flex;width:100%;height:100%;position:relative;}
+  .split.row{flex-direction:column;}
+  .split.col{flex-direction:row;}
+  .split > .child{position:relative;overflow:hidden;}
+  .divider{position:absolute;z-index:5;background:transparent;}
+  .divider.col{top:0;bottom:0;width:10px;margin-left:-5px;cursor:col-resize;}
+  .divider.row{left:0;right:0;height:10px;margin-top:-5px;cursor:row-resize;}
+  .divider:hover::after,.divider.dragging::after{content:'';position:absolute;background:var(--accent);opacity:.55;}
+  .divider.col:hover::after,.divider.col.dragging::after{left:4px;right:4px;top:0;bottom:0;}
+  .divider.row:hover::after,.divider.row.dragging::after{top:4px;bottom:4px;left:0;right:0;}
+  .cell{width:100%;height:100%;position:relative;background:#eeece7;}
+  .cell-inner{width:100%;height:100%;position:relative;overflow:hidden;background:#eeece7;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .cell-inner img{width:100%;height:100%;object-fit:cover;display:block;}
+  .cell-inner .empty-mark{font-size:11px;color:#b9b3a4;font-family:'IBM Plex Mono',monospace;text-align:center;}
+  .cell-clear{position:absolute;top:4px;right:4px;background:#00000099;color:#fff;border:none;
+    width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
+  .cell-inner:hover .cell-clear{display:block;}
+  .no-page{margin:auto;color:var(--muted);font-size:13px;text-align:center;max-width:280px;line-height:1.7;}
+  /* 缩略图 mini 预览 */
+  .mini-tree{width:64px;height:64px;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:0 0 auto;}
+  .variant-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;}
+  .variant-item{display:flex;align-items:center;gap:10px;padding:6px;border:1px solid var(--line);
+    border-radius:8px;cursor:pointer;}
+  .variant-item:hover{border-color:var(--accent);background:var(--accent-soft);}
+  .variant-item .vname{font-size:12.5px;}
+  .modal-mask{position:fixed;inset:0;background:#00000055;display:flex;align-items:center;justify-content:center;z-index:50;}
+  .modal{background:#fff;border-radius:12px;padding:20px;width:320px;max-height:80vh;display:flex;flex-direction:column;gap:12px;}
+  .modal h3{margin:0;font-size:14px;}
+  .modal-close{align-self:flex-end;}
+  .progress-mask{position:fixed;inset:0;background:#ffffffd0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;z-index:100;font-size:13px;color:var(--ink);}
+  .progress-bar{width:240px;height:6px;background:var(--line);border-radius:3px;overflow:hidden;}
+  .progress-bar > div{height:100%;background:var(--accent);width:0%;transition:width .15s;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 左侧栏 -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h2>画册设置</h2>
+      <div class="field-row"><label>页面宽 (mm)</label><input id="bookW" type="number" min="10" value="210"></div>
+      <div class="field-row"><label>页面高 (mm)</label><input id="bookH" type="number" min="10" value="210"></div>
+      <div class="field-row"><label>导出 DPI</label><input id="bookDpi" type="number" min="72" value="300"></div>
+      <div class="hint">修改后立即对新旧页面生效,导出时按此尺寸/精度渲染。</div>
+    </div>
+    <div class="page-list" id="pageList"></div>
+    <div class="add-page-box">
+      <h2 style="margin-bottom:6px;">添加页面</h2>
+      <div class="hint">按常用张数快速添加(游记页任意数量都支持):</div>
+      <div class="count-grid" id="quickCounts"></div>
+      <div class="field-row" style="margin-top:6px;">
+        <label>自定义张数</label><input id="customCount" type="number" min="1" value="5">
+      </div>
+      <button class="btn secondary small" id="addCustomBtn" style="width:100%;margin-bottom:8px;">生成该张数模板</button>
+      <div class="hint">或直接指定行×列网格:</div>
+      <div class="field-row">
+        <input id="gridR" type="number" min="1" value="2" style="width:44px;"> ×
+        <input id="gridC" type="number" min="1" value="3" style="width:44px;">
+        <button class="btn secondary small" id="addGridBtn">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主区域 -->
+  <div class="main">
+    <div class="toolbar" id="toolbar">
+      <div class="group">
+        <button class="btn secondary small" id="changeTemplateBtn">更换模板</button>
+      </div>
+      <div class="sep"></div>
+      <div class="group">
+        <label class="switch"><input type="checkbox" id="spacingOn"> 照片间留白</label>
+        <input type="number" id="spacingMM" min="0" step="0.5" value="3" style="width:56px;" title="间距(mm)">
+        <span style="font-size:11.5px;color:var(--muted);">mm</span>
+      </div>
+      <div class="sep"></div>
+      <div class="group">
+        <button class="btn secondary small" id="dupPageBtn">复制此页</button>
+        <button class="btn secondary small" id="delPageBtn">删除此页</button>
+      </div>
+      <div style="flex:1;"></div>
+      <div class="group">
+        <button class="btn secondary small" id="exportPngBtn">导出本页 PNG</button>
+        <button class="btn small" id="exportPdfBtn">导出全部为 PDF</button>
+      </div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="no-page" id="noPageMsg">还没有页面。<br>先在左下角选择每页照片数量,挑一个排版模板,开始搭建你的 138 页画册。</div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+<script>
+/* ====================== 数据模型 ====================== */
+let book = { widthMM:210, heightMM:210, dpi:300 };
+let pages = [];          // {id, count, tree, spacingOn, spacingMM, images:{leafId:{file,url}}}
+let currentPageId = null;
+let leafClickTarget = null;
+let idSeq = 1;
+const nextId = () => idSeq++;
+
+/* ---- split 树节点 ---- */
+const leaf = () => ({ type:'leaf', id:null });
+const split = (dir, ratio, a, b) => ({ type:'split', dir, ratio, a, b });
+
+function splitEqual(nodes, dir){
+  if(nodes.length === 1) return nodes[0];
+  return split(dir, 1/nodes.length, nodes[0], splitEqual(nodes.slice(1), dir));
+}
+function equalGrid(rows, cols){
+  const rowNodes = [];
+  for(let r=0;r<rows;r++){
+    const cells = []; for(let c=0;c<cols;c++) cells.push(leaf());
+    rowNodes.push(splitEqual(cells,'col'));
+  }
+  return splitEqual(rowNodes,'row');
+}
+function autoGrid(n){
+  const rows = Math.max(1, Math.round(Math.sqrt(n)));
+  const base = Math.floor(n/rows), rem = n % rows;
+  const rowNodes = [];
+  for(let r=0;r<rows;r++){
+    const count = base + (r < rem ? 1 : 0);
+    if(count <= 0) continue;
+    const cells=[]; for(let c=0;c<count;c++) cells.push(leaf());
+    rowNodes.push(splitEqual(cells,'col'));
+  }
+  return splitEqual(rowNodes,'row');
+}
+function assignIds(tree){
+  let count = 0;
+  (function walk(node){
+    if(node.type==='leaf'){ node.id = count++; }
+    else { walk(node.a); walk(node.b); }
+  })(tree);
+  return count;
+}
+function cloneTree(node){
+  if(node.type==='leaf') return { type:'leaf', id:node.id };
+  return { type:'split', dir:node.dir, ratio:node.ratio, a:cloneTree(node.a), b:cloneTree(node.b) };
+}
+
+/* ---- 预设模板 ---- */
+const TEMPLATES = {
+  1: [ {name:'整页', tree:leaf()} ],
+  2: [
+    {name:'左右对开', tree:split('col',0.5,leaf(),leaf())},
+    {name:'上下对开', tree:split('row',0.5,leaf(),leaf())},
+  ],
+  3: [
+    {name:'左大右两小', tree:split('col',0.6,leaf(),split('row',0.5,leaf(),leaf()))},
+    {name:'上大下两小', tree:split('row',0.6,leaf(),split('col',0.5,leaf(),leaf()))},
+    {name:'三等分·竖排', tree:equalGrid(1,3)},
+    {name:'三等分·横排', tree:equalGrid(3,1)},
+  ],
+  4: [
+    {name:'四宫格', tree:equalGrid(2,2)},
+    {name:'一大三小(下)', tree:split('row',0.58,leaf(),equalGrid(1,3))},
+    {name:'一大三小(右)', tree:split('col',0.58,leaf(),equalGrid(3,1))},
+    {name:'四等分·横条', tree:equalGrid(1,4)},
+    {name:'四等分·竖条', tree:equalGrid(4,1)},
+  ],
+  6: [
+    {name:'2行3列', tree:equalGrid(2,3)},
+    {name:'3行2列', tree:equalGrid(3,2)},
+    {name:'一大五小(右)', tree:split('col',0.5,leaf(),equalGrid(5,1))},
+    {name:'六等分·横条', tree:equalGrid(1,6)},
+  ],
+  9:  [ {name:'3×3 方格', tree:equalGrid(3,3)} ],
+  16: [ {name:'4×4 方格', tree:equalGrid(4,4)} ],
+  25: [ {name:'5×5 方格', tree:equalGrid(5,5)} ],
+};
+function variantsFor(n){
+  if(TEMPLATES[n]) return TEMPLATES[n];
+  return [ {name:`自动网格 (${n}张)`, tree:autoGrid(n)} ];
+}
+
+/* ====================== 页面 CRUD ====================== */
+function addPage(count, treeTemplate){
+  const tree = cloneTree(treeTemplate);
+  assignIds(tree);
+  const page = { id: nextId(), count, tree, spacingOn:false, spacingMM:3, images:{} };
+  pages.push(page);
+  selectPage(page.id);
+  renderPageList();
+}
+function selectPage(id){
+  currentPageId = id;
+  renderPageList();
+  renderEditor();
+}
+function currentPage(){ return pages.find(p=>p.id===currentPageId); }
+function deletePage(id){
+  const idx = pages.findIndex(p=>p.id===id);
+  if(idx<0) return;
+  pages.splice(idx,1);
+  if(currentPageId===id) currentPageId = pages[idx] ? pages[idx].id : (pages[idx-1]?pages[idx-1].id:null);
+  renderPageList(); renderEditor();
+}
+function duplicatePage(id){
+  const p = pages.find(x=>x.id===id);
+  if(!p) return;
+  const tree = cloneTree(p.tree);
+  const np = { id: nextId(), count:p.count, tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM, images:{} };
+  const idx = pages.findIndex(x=>x.id===id);
+  pages.splice(idx+1,0,np);
+  selectPage(np.id);
+  renderPageList();
+}
+function movePage(id, dir){
+  const idx = pages.findIndex(p=>p.id===id);
+  const ni = idx+dir;
+  if(ni<0||ni>=pages.length) return;
+  [pages[idx],pages[ni]] = [pages[ni],pages[idx]];
+  renderPageList();
+}
+
+/* ====================== 左侧页面列表 ====================== */
+function renderPageList(){
+  const wrap = document.getElementById('pageList');
+  wrap.innerHTML = '';
+  pages.forEach((p, i)=>{
+    const filled = Object.keys(p.images).length;
+    const el = document.createElement('div');
+    el.className = 'page-item' + (p.id===currentPageId?' active':'');
+    el.innerHTML = `
+      <span class="idx">${String(i+1).padStart(3,'0')}</span>
+      <span class="meta">${p.count} 张${p.spacingOn?' · 留白':''}<small>${filled}/${p.count} 已放照片</small></span>
+      <button class="icon-btn" data-act="up" title="上移">↑</button>
+      <button class="icon-btn" data-act="down" title="下移">↓</button>
+      <button class="icon-btn" data-act="del" title="删除">✕</button>
+    `;
+    el.addEventListener('click', (e)=>{
+      if(e.target.dataset.act) return;
+      selectPage(p.id);
+    });
+    el.querySelector('[data-act=up]').onclick = ()=>movePage(p.id,-1);
+    el.querySelector('[data-act=down]').onclick = ()=>movePage(p.id,1);
+    el.querySelector('[data-act=del]').onclick = ()=>{ if(confirm('删除这一页?')) deletePage(p.id); };
+    wrap.appendChild(el);
+  });
+}
+
+/* ====================== 编辑区渲染 ====================== */
+function renderEditor(){
+  const wrap = document.getElementById('canvasWrap');
+  const toolbar = document.getElementById('toolbar');
+  const page = currentPage();
+  if(!page){
+    wrap.innerHTML = '<div class="no-page" id="noPageMsg">还没有页面。<br>先在左下角选择每页照片数量,挑一个排版模板,开始搭建你的 138 页画册。</div>';
+    toolbar.style.opacity = .4; toolbar.style.pointerEvents='none';
+    return;
+  }
+  toolbar.style.opacity = 1; toolbar.style.pointerEvents='auto';
+  document.getElementById('spacingOn').checked = page.spacingOn;
+  document.getElementById('spacingMM').value = page.spacingMM;
+
+  wrap.innerHTML = '';
+  const availW = wrap.clientWidth - 40, availH = wrap.clientHeight - 40;
+  const ratio = book.widthMM / book.heightMM;
+  let w = availW, h = w/ratio;
+  if(h > availH){ h = availH; w = h*ratio; }
+  const frame = document.createElement('div');
+  frame.className = 'page-frame';
+  frame.style.width = w+'px'; frame.style.height = h+'px';
+  frame.appendChild(renderNode(page.tree, page));
+  wrap.appendChild(frame);
+}
+
+function renderNode(node, page){
+  if(node.type === 'leaf'){
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const gapPct = page.spacingOn ? (page.spacingMM / book.widthMM) * 100 : 0;
+    const inner = document.createElement('div');
+    inner.className = 'cell-inner';
+    inner.style.margin = gapPct + '%';
+    inner.style.width = `calc(100% - ${gapPct*2}%)`;
+    inner.style.height = `calc(100% - ${gapPct*2}%)`;
+    const img = page.images[node.id];
+    if(img){
+      const im = document.createElement('img');
+      im.src = img.url;
+      inner.appendChild(im);
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'cell-clear'; clearBtn.textContent='✕';
+      clearBtn.onclick = (e)=>{ e.stopPropagation(); delete page.images[node.id]; renderEditor(); renderPageList(); };
+      inner.appendChild(clearBtn);
+    } else {
+      const mark = document.createElement('span');
+      mark.className = 'empty-mark'; mark.textContent = '点击上传\n#'+(node.id+1);
+      mark.style.whiteSpace='pre-line';
+      inner.appendChild(mark);
+    }
+    inner.onclick = ()=>{ leafClickTarget = {page, leafId:node.id}; document.getElementById('fileInput').click(); };
+    cell.appendChild(inner);
+    return cell;
+  }
+  const box = document.createElement('div');
+  box.className = 'split ' + node.dir;
+  const aWrap = document.createElement('div');
+  aWrap.className = 'child';
+  aWrap.style.flex = node.ratio;
+  aWrap.appendChild(renderNode(node.a, page));
+  const bWrap = document.createElement('div');
+  bWrap.className = 'child';
+  bWrap.style.flex = (1-node.ratio);
+  bWrap.appendChild(renderNode(node.b, page));
+  const divider = document.createElement('div');
+  divider.className = 'divider ' + node.dir;
+  attachDrag(divider, node, box, aWrap, bWrap);
+  box.appendChild(aWrap); box.appendChild(divider); box.appendChild(bWrap);
+  // 定位分隔线
+  requestAnimationFrame(()=>positionDivider(box, divider, node));
+  return box;
+}
+function positionDivider(box, divider, node){
+  if(node.dir==='col'){ divider.style.left = (node.ratio*100)+'%'; }
+  else { divider.style.top = (node.ratio*100)+'%'; }
+}
+function attachDrag(divider, node, box, aWrap, bWrap){
+  divider.addEventListener('mousedown', (e)=>{
+    e.preventDefault();
+    divider.classList.add('dragging');
+    const rect = box.getBoundingClientRect();
+    function onMove(ev){
+      let ratio;
+      if(node.dir==='col') ratio = (ev.clientX - rect.left)/rect.width;
+      else ratio = (ev.clientY - rect.top)/rect.height;
+      ratio = Math.min(0.92, Math.max(0.08, ratio));
+      node.ratio = ratio;
+      aWrap.style.flex = ratio; bWrap.style.flex = (1-ratio);
+      positionDivider(box, divider, node);
+    }
+    function onUp(){
+      divider.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+/* ====================== 文件上传 ====================== */
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file || !leafClickTarget) return;
+  const url = URL.createObjectURL(file);
+  leafClickTarget.page.images[leafClickTarget.leafId] = { file, url };
+  renderEditor(); renderPageList();
+  e.target.value = '';
+});
+
+/* ====================== 快捷张数按钮 ====================== */
+function renderQuickCounts(){
+  const wrap = document.getElementById('quickCounts');
+  wrap.innerHTML = '';
+  [1,2,3,4,6,9,16,25].forEach(n=>{
+    const b = document.createElement('button');
+    b.className = 'count-btn'; b.textContent = n;
+    b.onclick = ()=>openVariantModal(n);
+    wrap.appendChild(b);
+  });
+}
+document.getElementById('addCustomBtn').onclick = ()=>{
+  const n = parseInt(document.getElementById('customCount').value, 10);
+  if(n>0) openVariantModal(n);
+};
+document.getElementById('addGridBtn').onclick = ()=>{
+  const r = parseInt(document.getElementById('gridR').value,10);
+  const c = parseInt(document.getElementById('gridC').value,10);
+  if(r>0 && c>0) addPage(r*c, equalGrid(r,c));
+};
+
+/* ====================== 模板选择弹窗 ====================== */
+function openVariantModal(n){
+  const variants = variantsFor(n);
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `<h3>选择 ${n} 张照片的排版</h3>`;
+  const list = document.createElement('div');
+  list.className = 'variant-list';
+  variants.forEach(v=>{
+    const item = document.createElement('div');
+    item.className = 'variant-item';
+    const mini = document.createElement('div');
+    mini.className = 'mini-tree';
+    mini.appendChild(renderMini(v.tree));
+    const name = document.createElement('span');
+    name.className = 'vname'; name.textContent = v.name;
+    item.appendChild(mini); item.appendChild(name);
+    item.onclick = ()=>{ addPage(n, v.tree); document.body.removeChild(mask); };
+    list.appendChild(item);
+  });
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn secondary small modal-close'; closeBtn.textContent = '取消';
+  closeBtn.onclick = ()=>document.body.removeChild(mask);
+  modal.appendChild(list); modal.appendChild(closeBtn);
+  mask.appendChild(modal);
+  mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
+  document.body.appendChild(mask);
+}
+function renderMini(node){
+  if(node.type==='leaf'){
+    const d = document.createElement('div');
+    d.style.cssText='width:100%;height:100%;background:#dedbd3;border:1px solid #fff;box-sizing:border-box;';
+    return d;
+  }
+  const box = document.createElement('div');
+  box.style.cssText = `display:flex;width:100%;height:100%;flex-direction:${node.dir==='row'?'column':'row'};`;
+  const a = document.createElement('div'); a.style.flex = node.ratio; a.appendChild(renderMini(node.a));
+  const b = document.createElement('div'); b.style.flex = 1-node.ratio; b.appendChild(renderMini(node.b));
+  box.appendChild(a); box.appendChild(b);
+  return box;
+}
+
+/* ====================== 工具栏交互 ====================== */
+document.getElementById('spacingOn').onchange = (e)=>{ currentPage().spacingOn = e.target.checked; renderEditor(); renderPageList(); };
+document.getElementById('spacingMM').onchange = (e)=>{ currentPage().spacingMM = parseFloat(e.target.value)||0; renderEditor(); };
+document.getElementById('dupPageBtn').onclick = ()=>duplicatePage(currentPageId);
+document.getElementById('delPageBtn').onclick = ()=>{ if(confirm('删除这一页?')) deletePage(currentPageId); };
+document.getElementById('changeTemplateBtn').onclick = ()=>{
+  const p = currentPage(); if(!p) return;
+  if(Object.keys(p.images).length && !confirm('更换模板会清空本页已放的照片,确定继续?')) return;
+  openVariantModalForReplace(p.count, p);
+};
+function openVariantModalForReplace(n, page){
+  const variants = variantsFor(n);
+  const mask = document.createElement('div'); mask.className='modal-mask';
+  const modal = document.createElement('div'); modal.className='modal';
+  modal.innerHTML = `<h3>更换排版 (${n} 张)</h3>`;
+  const list = document.createElement('div'); list.className='variant-list';
+  variants.forEach(v=>{
+    const item=document.createElement('div'); item.className='variant-item';
+    const mini=document.createElement('div'); mini.className='mini-tree'; mini.appendChild(renderMini(v.tree));
+    const name=document.createElement('span'); name.className='vname'; name.textContent=v.name;
+    item.appendChild(mini); item.appendChild(name);
+    item.onclick=()=>{
+      const tree = cloneTree(v.tree); assignIds(tree);
+      page.tree = tree; page.images = {};
+      document.body.removeChild(mask); renderEditor(); renderPageList();
+    };
+    list.appendChild(item);
+  });
+  const closeBtn=document.createElement('button'); closeBtn.className='btn secondary small modal-close'; closeBtn.textContent='取消';
+  closeBtn.onclick=()=>document.body.removeChild(mask);
+  modal.appendChild(list); modal.appendChild(closeBtn); mask.appendChild(modal);
+  mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
+  document.body.appendChild(mask);
+}
+
+/* ====================== 画册设置 ====================== */
+document.getElementById('bookW').onchange = (e)=>{ book.widthMM = parseFloat(e.target.value)||210; renderEditor(); };
+document.getElementById('bookH').onchange = (e)=>{ book.heightMM = parseFloat(e.target.value)||210; renderEditor(); };
+document.getElementById('bookDpi').onchange = (e)=>{ book.dpi = parseInt(e.target.value)||300; };
+
+/* ====================== 导出:计算矩形 ====================== */
+function computeRects(node, x, y, w, h, out){
+  if(node.type==='leaf'){ out[node.id] = {x,y,w,h}; return; }
+  if(node.dir==='col'){
+    const wa = w*node.ratio;
+    computeRects(node.a, x, y, wa, h, out);
+    computeRects(node.b, x+wa, y, w-wa, h, out);
+  } else {
+    const ha = h*node.ratio;
+    computeRects(node.a, x, y, w, ha, out);
+    computeRects(node.b, x, y+ha, w, h-ha, out);
+  }
+}
+async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
+  const canvas = document.createElement('canvas');
+  canvas.width = wPx; canvas.height = hPx;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,wPx,hPx);
+  const rects = {};
+  computeRects(page.tree, 0, 0, wPx, hPx, rects);
+  const gapPx = page.spacingOn ? page.spacingMM*pxPerMM : 0;
+  for(const leafId in rects){
+    const r = rects[leafId];
+    const rx = r.x+gapPx/2, ry = r.y+gapPx/2, rw = Math.max(1,r.w-gapPx), rh = Math.max(1,r.h-gapPx);
+    const img = page.images[leafId];
+    if(img){
+      const bitmap = await createImageBitmap(img.file);
+      const scale = Math.max(rw/bitmap.width, rh/bitmap.height);
+      const sw = rw/scale, sh = rh/scale;
+      const sx = (bitmap.width-sw)/2, sy = (bitmap.height-sh)/2;
+      ctx.drawImage(bitmap, sx, sy, sw, sh, rx, ry, rw, rh);
+      bitmap.close && bitmap.close();
+    } else {
+      ctx.fillStyle = '#e4e1d9';
+      ctx.fillRect(rx,ry,rw,rh);
+    }
+  }
+  return canvas;
+}
+
+/* ====================== 导出按钮 ====================== */
+document.getElementById('exportPngBtn').onclick = async ()=>{
+  const page = currentPage(); if(!page) return;
+  const pxPerMM = book.dpi/25.4;
+  const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
+  const canvas = await renderPageToCanvas(page, wPx, hPx, pxPerMM);
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `page-${pages.indexOf(page)+1}.png`;
+  a.click();
+};
+
+function showProgress(){
+  const mask = document.createElement('div');
+  mask.className = 'progress-mask'; mask.id='progressMask';
+  mask.innerHTML = `<div id="progressText">正在导出第 0 / 0 页…</div><div class="progress-bar"><div id="progressFill"></div></div>`;
+  document.body.appendChild(mask);
+}
+function updateProgress(i, total){
+  const text = document.getElementById('progressText');
+  const fill = document.getElementById('progressFill');
+  if(text) text.textContent = `正在导出第 ${i} / ${total} 页…`;
+  if(fill) fill.style.width = (i/total*100)+'%';
+}
+function hideProgress(){
+  const mask = document.getElementById('progressMask');
+  if(mask) document.body.removeChild(mask);
+}
+
+document.getElementById('exportPdfBtn').onclick = async ()=>{
+  if(!pages.length){ alert('还没有页面可导出。'); return; }
+  showProgress();
+  await new Promise(r=>setTimeout(r,30)); // 让遮罩先绘制出来
+  try{
+    const { jsPDF } = window.jspdf;
+    const pxPerMM = book.dpi/25.4;
+    const wPx = Math.round(book.widthMM*pxPerMM), hPx = Math.round(book.heightMM*pxPerMM);
+    const orientation = book.widthMM >= book.heightMM ? 'l' : 'p';
+    const pdf = new jsPDF({ orientation, unit:'mm', format:[book.widthMM, book.heightMM] });
+    for(let i=0;i<pages.length;i++){
+      updateProgress(i+1, pages.length);
+      await new Promise(r=>setTimeout(r,0));
+      const canvas = await renderPageToCanvas(pages[i], wPx, hPx, pxPerMM);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      if(i>0) pdf.addPage([book.widthMM, book.heightMM], orientation);
+      pdf.addImage(dataUrl, 'JPEG', 0, 0, book.widthMM, book.heightMM);
+    }
+    pdf.save('相册.pdf');
+  } catch(err){
+    alert('导出失败: ' + err.message);
+    console.error(err);
+  } finally {
+    hideProgress();
+  }
+};
+
+/* ====================== 初始化 ====================== */
+renderQuickCounts();
+renderPageList();
+renderEditor();
+window.addEventListener('resize', renderEditor);
+</script>
+</body>
+</html>

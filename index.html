@@ -70,7 +70,7 @@
   .split.row{flex-direction:column;}
   .split.col{flex-direction:row;}
   .split > .child{position:relative;overflow:hidden;}
-  .divider{position:absolute;z-index:5;background:transparent;}
+  .divider{position:absolute;z-index:5;background:transparent;touch-action:none;}
   .divider.col{top:0;bottom:0;width:10px;margin-left:-5px;cursor:col-resize;}
   .divider.row{left:0;right:0;height:10px;margin-top:-5px;cursor:row-resize;}
   .divider:hover::after,.divider.dragging::after{content:'';position:absolute;background:var(--accent);opacity:.55;}
@@ -79,11 +79,20 @@
   .cell{width:100%;height:100%;position:relative;background:#eeece7;}
   .cell-inner{width:100%;height:100%;position:relative;overflow:hidden;background:#eeece7;
     display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .cell-inner img{width:100%;height:100%;object-fit:cover;display:block;}
+  .cell-inner img{position:absolute;display:block;max-width:none;max-height:none;user-select:none;-webkit-user-drag:none;}
+  .cell-inner.has-image{cursor:grab;touch-action:none;}
+  .cell-inner.has-image:active{cursor:grabbing;}
   .cell-inner .empty-mark{font-size:11px;color:#b9b3a4;font-family:'IBM Plex Mono',monospace;text-align:center;}
-  .cell-clear{position:absolute;top:4px;right:4px;background:#00000099;color:#fff;border:none;
+  .cell-clear,.cell-replace{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
     width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
-  .cell-inner:hover .cell-clear{display:block;}
+  .cell-clear{right:4px;}
+  .cell-replace{right:26px;font-size:10px;}
+  .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace{display:block;}
+  .zoom-bar{position:absolute;left:4px;right:4px;bottom:4px;display:none;align-items:center;gap:5px;
+    background:#00000066;border-radius:14px;padding:3px 8px;z-index:4;}
+  .cell-inner:hover .zoom-bar{display:flex;}
+  .zoom-bar input[type=range]{flex:1;accent-color:#fff;height:12px;}
+  .zoom-bar button{background:transparent;border:none;color:#fff;cursor:pointer;font-size:12px;padding:0 2px;line-height:1;}
   .no-page{margin:auto;color:var(--muted);font-size:13px;text-align:center;max-width:280px;line-height:1.7;}
   /* 缩略图 mini 预览 */
   .mini-tree{width:64px;height:64px;border:1px solid var(--line);border-radius:4px;overflow:hidden;flex:0 0 auto;}
@@ -100,13 +109,68 @@
     align-items:center;justify-content:center;gap:10px;z-index:100;font-size:13px;color:var(--ink);}
   .progress-bar{width:240px;height:6px;background:var(--line);border-radius:3px;overflow:hidden;}
   .progress-bar > div{height:100%;background:var(--accent);width:0%;transition:width .15s;}
+  .overview-mask{position:fixed;inset:0;background:var(--paper);z-index:60;display:flex;flex-direction:column;}
+  .overview-head{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    justify-content:space-between;background:var(--panel);}
+  .overview-head h3{margin:0;font-size:14px;}
+  .overview-grid{flex:1;overflow-y:auto;padding:22px;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:20px 16px;align-content:start;}
+  .overview-item{cursor:pointer;}
+  .overview-item .frame{background:#fff;box-shadow:0 2px 10px #00000022;position:relative;
+    outline:2px solid transparent;}
+  .overview-item:hover .frame{outline-color:var(--accent);}
+  .overview-item .label{text-align:center;font-size:10.5px;color:var(--muted);margin-top:5px;
+    font-family:'IBM Plex Mono',monospace;}
+  /* 批量导入 */
+  .batch-modal{width:min(640px,92vw);max-height:88vh;}
+  .batch-thumbs{display:flex;flex-wrap:wrap;gap:6px;overflow-y:auto;max-height:38vh;padding:6px 2px;align-items:stretch;}
+  .batch-thumb{position:relative;width:68px;height:68px;border-radius:6px;overflow:hidden;background:#eee;flex:0 0 auto;}
+  .batch-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .bt-num{position:absolute;top:2px;left:2px;background:#00000099;color:#fff;font-size:9px;padding:1px 4px;
+    border-radius:8px;font-family:'IBM Plex Mono',monospace;}
+  .bt-rm{position:absolute;top:2px;right:2px;background:#00000099;color:#fff;border:none;width:17px;height:17px;
+    border-radius:50%;font-size:9px;cursor:pointer;line-height:1;}
+  .bt-moverow{position:absolute;bottom:2px;left:2px;right:2px;display:flex;justify-content:space-between;}
+  .bt-moverow button{background:#00000099;color:#fff;border:none;width:19px;height:19px;border-radius:50%;
+    font-size:10px;cursor:pointer;line-height:1;padding:0;}
+  .bt-moverow button:disabled{opacity:.3;}
+  .bt-break{width:12px;align-self:stretch;flex:0 0 auto;border-radius:4px;cursor:pointer;background:#0000000f;}
+  .bt-break.active{background:var(--accent);}
+  /* ---------- 移动端 ---------- */
+  .mobile-topbar{display:none;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex:0 0 auto;}
+  .mobile-topbar button{background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--ink);
+    padding:2px 4px;line-height:1;}
+  .mobile-topbar .mt-title{font-size:13px;font-weight:600;flex:1;}
+  .sidebar-close{display:none;}
+  .sidebar-backdrop{position:fixed;inset:0;background:#00000055;z-index:39;}
+  @media (max-width:860px){
+    .mobile-topbar{display:flex;}
+    .app{position:relative;}
+    .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:40;width:82vw;max-width:320px;flex-basis:auto;
+      transform:translateX(-100%);transition:transform .22s ease;}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-close{display:block;position:absolute;top:10px;right:10px;background:transparent;border:none;
+      font-size:18px;cursor:pointer;color:var(--muted);z-index:2;}
+    .toolbar{padding:8px 10px;gap:10px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+    .toolbar .btn.small,.toolbar .btn.secondary.small{white-space:nowrap;}
+    .canvas-wrap{padding:12px;}
+    .divider.col{width:26px;margin-left:-13px;}
+    .divider.row{height:26px;margin-top:-13px;}
+    .cell-clear,.cell-replace{width:26px;height:26px;font-size:13px;}
+    .cell-replace{right:32px;}
+    .zoom-bar{padding:6px 10px;bottom:6px;left:6px;right:6px;}
+    .modal{width:92vw;}
+  }
 </style>
 </head>
 <body>
 <div class="app">
+  <div class="sidebar-backdrop" id="sidebarBackdrop" style="display:none;"></div>
 
   <!-- 左侧栏 -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-close" id="sidebarCloseBtn">✕</button>
     <div class="sidebar-section">
       <h2>画册设置</h2>
       <div class="field-row"><label>页面宽 (mm)</label><input id="bookW" type="number" min="10" value="210"></div>
@@ -114,9 +178,16 @@
       <div class="field-row"><label>导出 DPI</label><input id="bookDpi" type="number" min="72" value="300"></div>
       <div class="hint">修改后立即对新旧页面生效,导出时按此尺寸/精度渲染。</div>
     </div>
+    <div class="sidebar-section" style="padding-top:10px;padding-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span id="cacheStatus" class="hint" style="margin:0;">本地缓存:未保存</span>
+        <button class="icon-btn" id="clearCacheBtn" title="清除本地缓存并重新开始">清空缓存</button>
+      </div>
+    </div>
     <div class="page-list" id="pageList"></div>
     <div class="add-page-box">
-      <h2 style="margin-bottom:6px;">添加页面</h2>
+      <button class="btn small" id="batchImportBtn" style="width:100%;margin-bottom:12px;">📥 批量导入照片 → 自动分组</button>
+      <h2 style="margin-bottom:6px;">添加单页</h2>
       <div class="hint">按常用张数快速添加(游记页任意数量都支持):</div>
       <div class="count-grid" id="quickCounts"></div>
       <div class="field-row" style="margin-top:6px;">
@@ -134,6 +205,11 @@
 
   <!-- 主区域 -->
   <div class="main">
+    <div class="mobile-topbar">
+      <button id="menuBtn" title="页面列表">☰</button>
+      <span class="mt-title">相册排版工具</span>
+      <button id="mobileOverviewBtn" title="画册总览">▦</button>
+    </div>
     <div class="toolbar" id="toolbar">
       <div class="group">
         <button class="btn secondary small" id="changeTemplateBtn">更换模板</button>
@@ -151,6 +227,7 @@
       </div>
       <div style="flex:1;"></div>
       <div class="group">
+        <button class="btn secondary small" id="overviewBtn">画册总览</button>
         <button class="btn secondary small" id="exportPngBtn">导出本页 PNG</button>
         <button class="btn small" id="exportPdfBtn">导出全部为 PDF</button>
       </div>
@@ -162,6 +239,7 @@
 </div>
 
 <input type="file" id="fileInput" accept="image/*" style="display:none;">
+<input type="file" id="batchFileInput" accept="image/*" multiple style="display:none;">
 
 <script>
 /* ====================== 数据模型 ====================== */
@@ -171,6 +249,123 @@ let currentPageId = null;
 let leafClickTarget = null;
 let idSeq = 1;
 const nextId = () => idSeq++;
+
+/* ====================== 本地缓存 (IndexedDB) ====================== */
+const DB_NAME = 'album-layout-tool-db';
+let dbPromise = null;
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve,reject)=>{
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = ()=>{
+      const db = req.result;
+      if(!db.objectStoreNames.contains('project')) db.createObjectStore('project');
+      if(!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+  return dbPromise;
+}
+async function idbPut(store, key, val){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readwrite');
+    tx.objectStore(store).put(val, key);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function idbGet(store, key){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function idbDelete(store, key){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store,'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function idbClearAll(){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(['project','images'],'readwrite');
+    tx.objectStore('project').clear();
+    tx.objectStore('images').clear();
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+let saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  setCacheStatus('保存中…');
+  saveTimer = setTimeout(saveProjectMeta, 400);
+}
+async function saveProjectMeta(){
+  const meta = {
+    book,
+    idSeq,
+    currentPageId,
+    pages: pages.map(p=>({
+      id:p.id, count:p.count, tree:p.tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM,
+      images: Object.fromEntries(Object.entries(p.images).map(([k,v])=>[k,{scale:v.scale,panFracX:v.panFracX,panFracY:v.panFracY}]))
+    }))
+  };
+  try{
+    await idbPut('project','main', meta);
+    setCacheStatus('已自动保存 ' + new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  }catch(err){
+    setCacheStatus('保存失败');
+    console.error(err);
+  }
+}
+function setCacheStatus(text){
+  const el = document.getElementById('cacheStatus');
+  if(el) el.textContent = '本地缓存:' + text;
+}
+async function restoreFromCache(){
+  let meta;
+  try{ meta = await idbGet('project','main'); }catch(err){ console.error(err); return false; }
+  if(!meta || !meta.pages || !meta.pages.length) return false;
+  const ok = confirm(`检测到本地保存的进度(共 ${meta.pages.length} 页),是否恢复?\n取消则从空白开始(不会删除已保存的缓存)。`);
+  if(!ok) return false;
+  book = meta.book || book;
+  idSeq = meta.idSeq || idSeq;
+  document.getElementById('bookW').value = book.widthMM;
+  document.getElementById('bookH').value = book.heightMM;
+  document.getElementById('bookDpi').value = book.dpi;
+  pages = [];
+  for(const pm of meta.pages){
+    const page = { id:pm.id, count:pm.count, tree:pm.tree, spacingOn:pm.spacingOn, spacingMM:pm.spacingMM, images:{} };
+    for(const leafKey in (pm.images||{})){
+      try{
+        const blob = await idbGet('images', pm.id+'__'+leafKey);
+        if(blob){
+          const meta = pm.images[leafKey] || {};
+          page.images[leafKey] = { file:blob, url:URL.createObjectURL(blob), scale:meta.scale||1, panFracX:meta.panFracX||0, panFracY:meta.panFracY||0 };
+        }
+      }catch(err){ console.error(err); }
+    }
+    pages.push(page);
+  }
+  currentPageId = meta.currentPageId && pages.some(p=>p.id===meta.currentPageId) ? meta.currentPageId : (pages[0] ? pages[0].id : null);
+  setCacheStatus('已恢复上次进度');
+  return true;
+}
+document.getElementById('clearCacheBtn').onclick = async ()=>{
+  if(!confirm('清空本地缓存不会影响当前页面上的内容,但下次打开将无法恢复。确定清空吗?')) return;
+  await idbClearAll();
+  setCacheStatus('已清空');
+};
 
 /* ---- split 树节点 ---- */
 const leaf = () => ({ type:'leaf', id:null });
@@ -256,19 +451,24 @@ function addPage(count, treeTemplate){
   pages.push(page);
   selectPage(page.id);
   renderPageList();
+  scheduleSave();
 }
 function selectPage(id){
   currentPageId = id;
   renderPageList();
   renderEditor();
+  if(typeof closeSidebar === 'function') closeSidebar();
 }
 function currentPage(){ return pages.find(p=>p.id===currentPageId); }
 function deletePage(id){
   const idx = pages.findIndex(p=>p.id===id);
   if(idx<0) return;
+  const p = pages[idx];
+  Object.keys(p.images).forEach(leafKey=>{ idbDelete('images', p.id+'__'+leafKey).catch(console.error); });
   pages.splice(idx,1);
   if(currentPageId===id) currentPageId = pages[idx] ? pages[idx].id : (pages[idx-1]?pages[idx-1].id:null);
   renderPageList(); renderEditor();
+  scheduleSave();
 }
 function duplicatePage(id){
   const p = pages.find(x=>x.id===id);
@@ -279,6 +479,7 @@ function duplicatePage(id){
   pages.splice(idx+1,0,np);
   selectPage(np.id);
   renderPageList();
+  scheduleSave();
 }
 function movePage(id, dir){
   const idx = pages.findIndex(p=>p.id===id);
@@ -286,6 +487,7 @@ function movePage(id, dir){
   if(ni<0||ni>=pages.length) return;
   [pages[idx],pages[ni]] = [pages[ni],pages[idx]];
   renderPageList();
+  scheduleSave();
 }
 
 /* ====================== 左侧页面列表 ====================== */
@@ -336,11 +538,24 @@ function renderEditor(){
   const frame = document.createElement('div');
   frame.className = 'page-frame';
   frame.style.width = w+'px'; frame.style.height = h+'px';
-  frame.appendChild(renderNode(page.tree, page));
+  frame.appendChild(renderNode(page.tree, page, true));
   wrap.appendChild(frame);
 }
 
-function renderNode(node, page){
+function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
+
+/* 计算"覆盖式"填充下,图片在容器中的显示尺寸与位置(支持额外缩放 scale 与拖拽偏移 panFrac) */
+function coverGeom(containerW, containerH, mediaW, mediaH, userScale, panFracX, panFracY){
+  const base = Math.max(containerW/mediaW, containerH/mediaH);
+  const scale = base * (userScale || 1);
+  const dw = mediaW*scale, dh = mediaH*scale;
+  const slackX = dw-containerW, slackY = dh-containerH;
+  const left = -(slackX/2) + (panFracX||0)*(slackX/2);
+  const top = -(slackY/2) + (panFracY||0)*(slackY/2);
+  return { scale, dw, dh, left, top, slackX, slackY };
+}
+
+function renderNode(node, page, interactive){
   if(node.type === 'leaf'){
     const cell = document.createElement('div');
     cell.className = 'cell';
@@ -350,22 +565,98 @@ function renderNode(node, page){
     inner.style.margin = gapPct + '%';
     inner.style.width = `calc(100% - ${gapPct*2}%)`;
     inner.style.height = `calc(100% - ${gapPct*2}%)`;
-    const img = page.images[node.id];
-    if(img){
+    const imgData = page.images[node.id];
+    if(imgData){
+      inner.classList.add('has-image');
       const im = document.createElement('img');
-      im.src = img.url;
+      im.src = imgData.url;
       inner.appendChild(im);
-      const clearBtn = document.createElement('button');
-      clearBtn.className = 'cell-clear'; clearBtn.textContent='✕';
-      clearBtn.onclick = (e)=>{ e.stopPropagation(); delete page.images[node.id]; renderEditor(); renderPageList(); };
-      inner.appendChild(clearBtn);
+
+      const doLayout = ()=>{
+        const cw = inner.clientWidth, ch = inner.clientHeight;
+        const nw = im.naturalWidth, nh = im.naturalHeight;
+        if(!cw||!ch||!nw||!nh) return;
+        const g = coverGeom(cw,ch,nw,nh, imgData.scale, imgData.panFracX, imgData.panFracY);
+        im.style.width = g.dw+'px'; im.style.height = g.dh+'px';
+        im.style.left = g.left+'px'; im.style.top = g.top+'px';
+      };
+      if(im.complete && im.naturalWidth) requestAnimationFrame(doLayout);
+      else im.onload = doLayout;
+
+      if(interactive){
+        // 拖拽平移(支持鼠标与触屏)
+        inner.addEventListener('pointerdown', (e)=>{
+          if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace')) return;
+          e.preventDefault();
+          const cw = inner.clientWidth, ch = inner.clientHeight;
+          const nw = im.naturalWidth, nh = im.naturalHeight;
+          if(!nw||!nh) return;
+          inner.setPointerCapture(e.pointerId);
+          const startX = e.clientX, startY = e.clientY;
+          const g0 = coverGeom(cw,ch,nw,nh, imgData.scale, imgData.panFracX, imgData.panFracY);
+          let dragged = false;
+          function onMove(ev){
+            dragged = true;
+            const dx = ev.clientX-startX, dy = ev.clientY-startY;
+            const newLeft = g0.left+dx, newTop = g0.top+dy;
+            imgData.panFracX = g0.slackX!==0 ? clamp((newLeft+g0.slackX/2)/(g0.slackX/2), -1, 1) : 0;
+            imgData.panFracY = g0.slackY!==0 ? clamp((newTop+g0.slackY/2)/(g0.slackY/2), -1, 1) : 0;
+            doLayout();
+          }
+          function onUp(ev){
+            inner.removeEventListener('pointermove', onMove);
+            inner.removeEventListener('pointerup', onUp);
+            try{ inner.releasePointerCapture(ev.pointerId); }catch(err){}
+            if(dragged) scheduleSave();
+          }
+          inner.addEventListener('pointermove', onMove);
+          inner.addEventListener('pointerup', onUp);
+        });
+        // 滚轮缩放
+        let wheelSaveTimer = null;
+        inner.addEventListener('wheel', (e)=>{
+          e.preventDefault();
+          imgData.scale = clamp((imgData.scale||1) + (e.deltaY<0?0.08:-0.08), 1, 4);
+          doLayout();
+          const slider = inner.querySelector('.zoom-slider');
+          if(slider) slider.value = imgData.scale;
+          clearTimeout(wheelSaveTimer); wheelSaveTimer = setTimeout(scheduleSave, 300);
+        }, {passive:false});
+
+        const replaceBtn = document.createElement('button');
+        replaceBtn.className = 'cell-replace'; replaceBtn.textContent = '⟳'; replaceBtn.title='更换照片';
+        replaceBtn.onclick = (e)=>{ e.stopPropagation(); leafClickTarget = {page, leafId:node.id}; document.getElementById('fileInput').click(); };
+        inner.appendChild(replaceBtn);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'cell-clear'; clearBtn.textContent='✕'; clearBtn.title='移除照片';
+        clearBtn.onclick = (e)=>{ e.stopPropagation(); delete page.images[node.id]; idbDelete('images', page.id+'__'+node.id).catch(console.error); renderEditor(); renderPageList(); scheduleSave(); };
+        inner.appendChild(clearBtn);
+
+        const zoomBar = document.createElement('div');
+        zoomBar.className = 'zoom-bar';
+        const resetBtn = document.createElement('button');
+        resetBtn.textContent = '⟲'; resetBtn.title = '重置缩放/位置';
+        resetBtn.onclick = (e)=>{ e.stopPropagation(); imgData.scale=1; imgData.panFracX=0; imgData.panFracY=0; slider.value=1; doLayout(); scheduleSave(); };
+        const slider = document.createElement('input');
+        slider.type = 'range'; slider.className='zoom-slider';
+        slider.min = 1; slider.max = 4; slider.step = 0.02; slider.value = imgData.scale || 1;
+        slider.oninput = (e)=>{ imgData.scale = parseFloat(e.target.value); doLayout(); };
+        slider.onchange = ()=>scheduleSave();
+        slider.onmousedown = (e)=>e.stopPropagation();
+        slider.onpointerdown = (e)=>e.stopPropagation();
+        zoomBar.appendChild(resetBtn); zoomBar.appendChild(slider);
+        inner.appendChild(zoomBar);
+      }
     } else {
       const mark = document.createElement('span');
       mark.className = 'empty-mark'; mark.textContent = '点击上传\n#'+(node.id+1);
       mark.style.whiteSpace='pre-line';
       inner.appendChild(mark);
+      if(interactive){
+        inner.onclick = ()=>{ leafClickTarget = {page, leafId:node.id}; document.getElementById('fileInput').click(); };
+      }
     }
-    inner.onclick = ()=>{ leafClickTarget = {page, leafId:node.id}; document.getElementById('fileInput').click(); };
     cell.appendChild(inner);
     return cell;
   }
@@ -374,17 +665,20 @@ function renderNode(node, page){
   const aWrap = document.createElement('div');
   aWrap.className = 'child';
   aWrap.style.flex = node.ratio;
-  aWrap.appendChild(renderNode(node.a, page));
+  aWrap.appendChild(renderNode(node.a, page, interactive));
   const bWrap = document.createElement('div');
   bWrap.className = 'child';
   bWrap.style.flex = (1-node.ratio);
-  bWrap.appendChild(renderNode(node.b, page));
-  const divider = document.createElement('div');
-  divider.className = 'divider ' + node.dir;
-  attachDrag(divider, node, box, aWrap, bWrap);
-  box.appendChild(aWrap); box.appendChild(divider); box.appendChild(bWrap);
-  // 定位分隔线
-  requestAnimationFrame(()=>positionDivider(box, divider, node));
+  bWrap.appendChild(renderNode(node.b, page, interactive));
+  box.appendChild(aWrap);
+  if(interactive){
+    const divider = document.createElement('div');
+    divider.className = 'divider ' + node.dir;
+    attachDrag(divider, node, box, aWrap, bWrap);
+    box.appendChild(divider);
+    requestAnimationFrame(()=>positionDivider(box, divider, node));
+  }
+  box.appendChild(bWrap);
   return box;
 }
 function positionDivider(box, divider, node){
@@ -392,8 +686,9 @@ function positionDivider(box, divider, node){
   else { divider.style.top = (node.ratio*100)+'%'; }
 }
 function attachDrag(divider, node, box, aWrap, bWrap){
-  divider.addEventListener('mousedown', (e)=>{
+  divider.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
+    divider.setPointerCapture(e.pointerId);
     divider.classList.add('dragging');
     const rect = box.getBoundingClientRect();
     function onMove(ev){
@@ -405,13 +700,15 @@ function attachDrag(divider, node, box, aWrap, bWrap){
       aWrap.style.flex = ratio; bWrap.style.flex = (1-ratio);
       positionDivider(box, divider, node);
     }
-    function onUp(){
+    function onUp(ev){
       divider.classList.remove('dragging');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      divider.removeEventListener('pointermove', onMove);
+      divider.removeEventListener('pointerup', onUp);
+      try{ divider.releasePointerCapture(ev.pointerId); }catch(err){}
+      scheduleSave();
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    divider.addEventListener('pointermove', onMove);
+    divider.addEventListener('pointerup', onUp);
   });
 }
 
@@ -420,8 +717,10 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(!file || !leafClickTarget) return;
   const url = URL.createObjectURL(file);
-  leafClickTarget.page.images[leafClickTarget.leafId] = { file, url };
+  leafClickTarget.page.images[leafClickTarget.leafId] = { file, url, scale:1, panFracX:0, panFracY:0 };
   renderEditor(); renderPageList();
+  idbPut('images', leafClickTarget.page.id+'__'+leafClickTarget.leafId, file).catch(console.error);
+  scheduleSave();
   e.target.value = '';
 });
 
@@ -491,8 +790,8 @@ function renderMini(node){
 }
 
 /* ====================== 工具栏交互 ====================== */
-document.getElementById('spacingOn').onchange = (e)=>{ currentPage().spacingOn = e.target.checked; renderEditor(); renderPageList(); };
-document.getElementById('spacingMM').onchange = (e)=>{ currentPage().spacingMM = parseFloat(e.target.value)||0; renderEditor(); };
+document.getElementById('spacingOn').onchange = (e)=>{ currentPage().spacingOn = e.target.checked; renderEditor(); renderPageList(); scheduleSave(); };
+document.getElementById('spacingMM').onchange = (e)=>{ currentPage().spacingMM = parseFloat(e.target.value)||0; renderEditor(); scheduleSave(); };
 document.getElementById('dupPageBtn').onclick = ()=>duplicatePage(currentPageId);
 document.getElementById('delPageBtn').onclick = ()=>{ if(confirm('删除这一页?')) deletePage(currentPageId); };
 document.getElementById('changeTemplateBtn').onclick = ()=>{
@@ -512,9 +811,12 @@ function openVariantModalForReplace(n, page){
     const name=document.createElement('span'); name.className='vname'; name.textContent=v.name;
     item.appendChild(mini); item.appendChild(name);
     item.onclick=()=>{
+      const oldKeys = Object.keys(page.images);
       const tree = cloneTree(v.tree); assignIds(tree);
       page.tree = tree; page.images = {};
+      oldKeys.forEach(leafKey=>{ idbDelete('images', page.id+'__'+leafKey).catch(console.error); });
       document.body.removeChild(mask); renderEditor(); renderPageList();
+      scheduleSave();
     };
     list.appendChild(item);
   });
@@ -526,9 +828,9 @@ function openVariantModalForReplace(n, page){
 }
 
 /* ====================== 画册设置 ====================== */
-document.getElementById('bookW').onchange = (e)=>{ book.widthMM = parseFloat(e.target.value)||210; renderEditor(); };
-document.getElementById('bookH').onchange = (e)=>{ book.heightMM = parseFloat(e.target.value)||210; renderEditor(); };
-document.getElementById('bookDpi').onchange = (e)=>{ book.dpi = parseInt(e.target.value)||300; };
+document.getElementById('bookW').onchange = (e)=>{ book.widthMM = parseFloat(e.target.value)||210; renderEditor(); scheduleSave(); };
+document.getElementById('bookH').onchange = (e)=>{ book.heightMM = parseFloat(e.target.value)||210; renderEditor(); scheduleSave(); };
+document.getElementById('bookDpi').onchange = (e)=>{ book.dpi = parseInt(e.target.value)||300; scheduleSave(); };
 
 /* ====================== 导出:计算矩形 ====================== */
 function computeRects(node, x, y, w, h, out){
@@ -557,9 +859,8 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
     const img = page.images[leafId];
     if(img){
       const bitmap = await createImageBitmap(img.file);
-      const scale = Math.max(rw/bitmap.width, rh/bitmap.height);
-      const sw = rw/scale, sh = rh/scale;
-      const sx = (bitmap.width-sw)/2, sy = (bitmap.height-sh)/2;
+      const g = coverGeom(rw, rh, bitmap.width, bitmap.height, img.scale, img.panFracX, img.panFracY);
+      const sx = -g.left/g.scale, sy = -g.top/g.scale, sw = rw/g.scale, sh = rh/g.scale;
       ctx.drawImage(bitmap, sx, sy, sw, sh, rx, ry, rw, rh);
       bitmap.close && bitmap.close();
     } else {
@@ -626,11 +927,175 @@ document.getElementById('exportPdfBtn').onclick = async ()=>{
   }
 };
 
+/* ====================== 画册总览 ====================== */
+function openOverview(){
+  if(!pages.length){ alert('还没有页面。'); return; }
+  const mask = document.createElement('div');
+  mask.className = 'overview-mask';
+  const head = document.createElement('div');
+  head.className = 'overview-head';
+  head.innerHTML = `<h3>画册总览 · 共 ${pages.length} 页</h3>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn secondary small'; closeBtn.textContent = '关闭';
+  closeBtn.onclick = ()=>document.body.removeChild(mask);
+  head.appendChild(closeBtn);
+  const grid = document.createElement('div');
+  grid.className = 'overview-grid';
+  const ratio = book.widthMM / book.heightMM;
+  pages.forEach((p,i)=>{
+    const item = document.createElement('div');
+    item.className = 'overview-item';
+    const frame = document.createElement('div');
+    frame.className = 'frame';
+    frame.style.width = '100%';
+    frame.style.aspectRatio = ratio;
+    frame.appendChild(renderNode(p.tree, p, false));
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = `第 ${i+1} 页 · ${p.count} 张`;
+    item.appendChild(frame); item.appendChild(label);
+    item.onclick = ()=>{ document.body.removeChild(mask); selectPage(p.id); };
+    grid.appendChild(item);
+  });
+  mask.appendChild(head); mask.appendChild(grid);
+  document.body.appendChild(mask);
+}
+document.getElementById('overviewBtn').onclick = openOverview;
+document.getElementById('mobileOverviewBtn').onclick = openOverview;
+
+/* ====================== 移动端侧栏 ====================== */
+const sidebarEl = document.getElementById('sidebar');
+const backdropEl = document.getElementById('sidebarBackdrop');
+function openSidebar(){ sidebarEl.classList.add('open'); backdropEl.style.display='block'; }
+function closeSidebar(){ sidebarEl.classList.remove('open'); backdropEl.style.display='none'; }
+document.getElementById('menuBtn').onclick = openSidebar;
+document.getElementById('sidebarCloseBtn').onclick = closeSidebar;
+backdropEl.onclick = closeSidebar;
+
+/* ====================== 批量导入照片(自动分组) ====================== */
+let batchFiles = [];
+let batchBreaks = new Set(); // 存"在第 i 张之后切一刀"的下标
+document.getElementById('batchFileInput').addEventListener('change', (e)=>{
+  batchFiles = batchFiles.concat(Array.from(e.target.files));
+  e.target.value = '';
+  renderBatchThumbs();
+});
+function computeGroups(){
+  const groups = []; let cur = [];
+  batchFiles.forEach((f,i)=>{
+    cur.push(f);
+    if(batchBreaks.has(i) || i===batchFiles.length-1){ groups.push(cur); cur=[]; }
+  });
+  return groups;
+}
+function renderBatchThumbs(){
+  const wrap = document.getElementById('batchThumbs');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  batchFiles.forEach((file,i)=>{
+    const t = document.createElement('div'); t.className='batch-thumb';
+    const img = document.createElement('img'); img.src = URL.createObjectURL(file);
+    const num = document.createElement('span'); num.className='bt-num'; num.textContent = i+1;
+    const rm = document.createElement('button'); rm.className='bt-rm'; rm.textContent='✕'; rm.title='移除';
+    rm.onclick = ()=>{
+      const nb = new Set();
+      batchBreaks.forEach(b=>{ if(b<i) nb.add(b); else if(b>i) nb.add(b-1); });
+      batchBreaks = nb;
+      batchFiles.splice(i,1);
+      renderBatchThumbs();
+    };
+    const moveRow = document.createElement('div'); moveRow.className='bt-moverow';
+    const left = document.createElement('button'); left.textContent='◀'; left.disabled=(i===0);
+    left.onclick = ()=>{ [batchFiles[i-1],batchFiles[i]]=[batchFiles[i],batchFiles[i-1]]; renderBatchThumbs(); };
+    const right = document.createElement('button'); right.textContent='▶'; right.disabled=(i===batchFiles.length-1);
+    right.onclick = ()=>{ [batchFiles[i+1],batchFiles[i]]=[batchFiles[i],batchFiles[i+1]]; renderBatchThumbs(); };
+    moveRow.appendChild(left); moveRow.appendChild(right);
+    t.appendChild(num); t.appendChild(img); t.appendChild(rm); t.appendChild(moveRow);
+    wrap.appendChild(t);
+    if(i < batchFiles.length-1){
+      const brk = document.createElement('div');
+      brk.className = 'bt-break' + (batchBreaks.has(i)?' active':'');
+      brk.title = '点击切换分页点';
+      brk.onclick = ()=>{ if(batchBreaks.has(i)) batchBreaks.delete(i); else batchBreaks.add(i); renderBatchThumbs(); };
+      wrap.appendChild(brk);
+    }
+  });
+  const groups = computeGroups();
+  const summary = document.getElementById('batchSummary');
+  if(summary){
+    summary.textContent = batchFiles.length
+      ? `共 ${batchFiles.length} 张 → 将生成 ${groups.length} 页 (${groups.map(g=>g.length).join('+')})`
+      : '还没有选择照片';
+  }
+}
+function openBatchImport(){
+  batchFiles = []; batchBreaks = new Set();
+  const mask = document.createElement('div'); mask.className = 'modal-mask';
+  const modal = document.createElement('div'); modal.className = 'modal batch-modal';
+  modal.innerHTML = `
+    <h3>批量导入照片 · 自动分组</h3>
+    <button class="btn secondary small" id="batchPickBtn" style="align-self:flex-start;">选择照片(可多选,可分次选)</button>
+    <div class="field-row" style="margin-top:2px;">
+      <label>每组张数</label><input id="batchGroupSize" type="number" min="1" value="4" style="width:60px;">
+      <button class="btn secondary small" id="autoGroupBtn">按此张数自动分组</button>
+    </div>
+    <div class="hint">◀▶ 调整叙事顺序;点击两张照片之间的细条,切/取消一个分页点;✕ 移除误选的照片。</div>
+    <div id="batchSummary" class="hint" style="font-weight:600;color:var(--ink);">还没有选择照片</div>
+    <div id="batchThumbs" class="batch-thumbs"></div>
+  `;
+  const btnRow = document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px;justify-content:flex-end;';
+  const cancelBtn = document.createElement('button'); cancelBtn.className='btn secondary small'; cancelBtn.textContent='取消';
+  cancelBtn.onclick = ()=>document.body.removeChild(mask);
+  const confirmBtn = document.createElement('button'); confirmBtn.className='btn small'; confirmBtn.textContent='生成页面';
+  confirmBtn.onclick = ()=>{
+    const groups = computeGroups();
+    if(!groups.length){ alert('请先选择照片。'); return; }
+    let firstId = null;
+    groups.forEach(files=>{
+      const n = files.length;
+      const tree = cloneTree(variantsFor(n)[0].tree);
+      assignIds(tree);
+      const page = { id: nextId(), count:n, tree, spacingOn:false, spacingMM:3, images:{} };
+      files.forEach((file, idx)=>{
+        const url = URL.createObjectURL(file);
+        page.images[idx] = { file, url, scale:1, panFracX:0, panFracY:0 };
+        idbPut('images', page.id+'__'+idx, file).catch(console.error);
+      });
+      pages.push(page);
+      if(firstId===null) firstId = page.id;
+    });
+    document.body.removeChild(mask);
+    batchFiles = []; batchBreaks = new Set();
+    renderPageList();
+    if(firstId) selectPage(firstId);
+    scheduleSave();
+  };
+  btnRow.appendChild(cancelBtn); btnRow.appendChild(confirmBtn);
+  modal.appendChild(btnRow);
+  mask.appendChild(modal);
+  mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
+  document.body.appendChild(mask);
+  document.getElementById('batchPickBtn').onclick = ()=>document.getElementById('batchFileInput').click();
+  document.getElementById('autoGroupBtn').onclick = ()=>{
+    const n = parseInt(document.getElementById('batchGroupSize').value,10) || 4;
+    batchBreaks = new Set();
+    for(let i=n-1;i<batchFiles.length-1;i+=n) batchBreaks.add(i);
+    renderBatchThumbs();
+  };
+}
+document.getElementById('batchImportBtn').onclick = openBatchImport;
+
 /* ====================== 初始化 ====================== */
 renderQuickCounts();
-renderPageList();
-renderEditor();
+(async function init(){
+  await restoreFromCache();
+  renderPageList();
+  renderEditor();
+})();
 window.addEventListener('resize', renderEditor);
+window.addEventListener('beforeunload', (e)=>{
+  if(pages.length){ e.preventDefault(); e.returnValue=''; }
+});
 </script>
 </body>
 </html>

@@ -145,6 +145,9 @@
     display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
   .bt-break:hover{background:#00000022;}
   .bt-break.active{background:var(--accent);color:#fff;}
+  .batch-hover-preview{position:fixed;width:280px;height:280px;pointer-events:none;z-index:300;
+    border-radius:8px;overflow:hidden;box-shadow:0 8px 28px #00000055;border:3px solid #fff;background:#f2f0ec;display:none;}
+  .batch-hover-preview img{width:100%;height:100%;object-fit:contain;display:block;}
   /* ---------- 移动端 ---------- */
   .mobile-topbar{display:none;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);
     border-bottom:1px solid var(--line);flex:0 0 auto;}
@@ -1174,6 +1177,7 @@ backdropEl.onclick = closeSidebar;
 /* ====================== 批量导入照片(自动分组) ====================== */
 let batchFiles = [];
 let batchBreaks = new Set(); // 存"在第 i 张之后切一刀"的下标
+let batchAppliedPageIds = []; // 这次叙事视图会话里已经生成/更新过的页面 id,按页面顺序
 document.getElementById('batchFileInput').addEventListener('change', (e)=>{
   batchFiles = batchFiles.concat(Array.from(e.target.files));
   e.target.value = '';
@@ -1187,13 +1191,50 @@ function computeGroups(){
   });
   return groups;
 }
+function collectLeafIdsSorted(node){
+  const out = [];
+  (function walk(n){ if(n.type==='leaf') out.push(n.id); else { walk(n.a); walk(n.b); } })(node);
+  out.sort((a,b)=>a-b);
+  return out;
+}
+/* 桌面端悬停放大预览(触屏设备没有真正的 hover,不接这个) */
+let batchPreviewEl = null;
+const supportsHoverPreview = window.matchMedia('(hover: hover)').matches;
+function showBatchPreview(url){
+  if(!batchPreviewEl){
+    batchPreviewEl = document.createElement('div');
+    batchPreviewEl.className = 'batch-hover-preview';
+    batchPreviewEl.appendChild(document.createElement('img'));
+    document.body.appendChild(batchPreviewEl);
+  }
+  batchPreviewEl.querySelector('img').src = url;
+  batchPreviewEl.style.display = 'block';
+}
+function hideBatchPreview(){
+  if(batchPreviewEl) batchPreviewEl.style.display = 'none';
+}
+function positionBatchPreview(e){
+  if(!batchPreviewEl || batchPreviewEl.style.display==='none') return;
+  const size = 280, margin = 16;
+  let x = e.clientX + margin, y = e.clientY + margin;
+  if(x + size > window.innerWidth) x = e.clientX - size - margin;
+  if(y + size > window.innerHeight) y = e.clientY - size - margin;
+  batchPreviewEl.style.left = x+'px';
+  batchPreviewEl.style.top = y+'px';
+}
 function renderBatchThumbs(){
   const wrap = document.getElementById('batchThumbs');
   if(!wrap) return;
+  hideBatchPreview();
   wrap.innerHTML = '';
   batchFiles.forEach((file,i)=>{
     const t = document.createElement('div'); t.className='batch-thumb';
     const img = document.createElement('img'); img.src = URL.createObjectURL(file);
+    if(supportsHoverPreview){
+      img.addEventListener('mouseenter', ()=>showBatchPreview(img.src));
+      img.addEventListener('mousemove', positionBatchPreview);
+      img.addEventListener('mouseleave', hideBatchPreview);
+    }
     const num = document.createElement('span'); num.className='bt-num'; num.textContent = i+1;
     const rm = document.createElement('button'); rm.className='bt-rm'; rm.textContent='✕'; rm.title='移除';
     rm.onclick = ()=>{
@@ -1229,8 +1270,62 @@ function renderBatchThumbs(){
       : '还没有选择照片';
   }
 }
+/* 把当前的分组结果应用成真正的页面。可以反复调用:如果上次应用过,
+   会原地更新/替换那批页面(而不是每次都在末尾重新追加),方便持续调整。
+   某页新张数超过原模板容量时自动换成能放下的模板;张数变少则保留原模板,多出的格子留空。 */
+function applyBatchGrouping(){
+  const groups = computeGroups();
+  if(!groups.length){ alert('请先选择照片。'); return 0; }
+
+  let insertAt = pages.length;
+  const oldTrackedPages = [];
+  if(batchAppliedPageIds.length){
+    const idx = pages.findIndex(p => p.id === batchAppliedPageIds[0]);
+    if(idx >= 0){
+      insertAt = idx;
+      batchAppliedPageIds.forEach(id=>{
+        const p = pages.find(x=>x.id===id);
+        if(p) oldTrackedPages.push(p);
+      });
+    }
+  }
+
+  const newPages = groups.map((files, i)=>{
+    const n = files.length;
+    const oldPage = oldTrackedPages[i];
+    let pageObj;
+    if(oldPage && n <= oldPage.count){
+      pageObj = { id: oldPage.id, count: oldPage.count, tree: oldPage.tree, spacingOn: oldPage.spacingOn, spacingMM: oldPage.spacingMM, images: {} };
+    } else {
+      const tree = cloneTree(variantsFor(n)[0].tree);
+      assignIds(tree);
+      pageObj = { id: oldPage ? oldPage.id : nextId(), count:n, tree, spacingOn: oldPage ? oldPage.spacingOn : false, spacingMM: oldPage ? oldPage.spacingMM : 3, images:{} };
+    }
+    const leafIds = collectLeafIdsSorted(pageObj.tree);
+    files.forEach((file, idx)=>{
+      const leafId = leafIds[idx];
+      const url = URL.createObjectURL(file);
+      pageObj.images[leafId] = { file, url, scale:1, panFracX:0, panFracY:0 };
+      idbPut('images', pageObj.id+'__'+leafId, file).catch(console.error);
+    });
+    return pageObj;
+  });
+
+  for(let i=newPages.length;i<oldTrackedPages.length;i++){
+    Object.keys(oldTrackedPages[i].images).forEach(leafKey=>{
+      idbDelete('images', oldTrackedPages[i].id+'__'+leafKey).catch(console.error);
+    });
+  }
+
+  pages.splice(insertAt, oldTrackedPages.length, ...newPages);
+  batchAppliedPageIds = newPages.map(p=>p.id);
+  renderPageList();
+  if(newPages[0]) selectPage(newPages[0].id);
+  scheduleSave();
+  return newPages.length;
+}
 function openBatchImport(){
-  batchFiles = []; batchBreaks = new Set();
+  batchFiles = []; batchBreaks = new Set(); batchAppliedPageIds = [];
   const mask = document.createElement('div'); mask.className = 'modal-mask';
   const modal = document.createElement('div'); modal.className = 'modal batch-modal';
   modal.innerHTML = `
@@ -1240,41 +1335,24 @@ function openBatchImport(){
       <label>每组张数</label><input id="batchGroupSize" type="number" min="1" value="4" style="width:60px;">
       <button class="btn secondary small" id="autoGroupBtn">按此张数自动分组</button>
     </div>
-    <div class="hint">◀▶ 调整叙事顺序;点击照片之间的 ＋ 添加分页点(变成 ✂,再点一下可取消)——每页张数可以不一样,不用都按固定张数分;✕ 移除误选的照片。</div>
+    <div class="hint">◀▶ 调整叙事顺序;点击照片之间的 ＋ 添加分页点(变成 ✂,再点一下取消)——每页张数可以不一样。点"应用分页"生成页面后可以继续调整、再次应用;某页张数变多会自动换成能放下的模板,变少则保留原模板、多出的格子留空。✕ 移除误选的照片。</div>
     <div id="batchSummary" class="hint" style="font-weight:600;color:var(--ink);">还没有选择照片</div>
     <div id="batchThumbs" class="batch-thumbs"></div>
   `;
   const btnRow = document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px;justify-content:flex-end;';
-  const cancelBtn = document.createElement('button'); cancelBtn.className='btn secondary small'; cancelBtn.textContent='取消';
-  cancelBtn.onclick = ()=>document.body.removeChild(mask);
-  const confirmBtn = document.createElement('button'); confirmBtn.className='btn small'; confirmBtn.textContent='生成页面';
-  confirmBtn.onclick = ()=>{
-    const groups = computeGroups();
-    if(!groups.length){ alert('请先选择照片。'); return; }
-    let firstId = null;
-    groups.forEach(files=>{
-      const n = files.length;
-      const tree = cloneTree(variantsFor(n)[0].tree);
-      assignIds(tree);
-      const page = { id: nextId(), count:n, tree, spacingOn:false, spacingMM:3, images:{} };
-      files.forEach((file, idx)=>{
-        const url = URL.createObjectURL(file);
-        page.images[idx] = { file, url, scale:1, panFracX:0, panFracY:0 };
-        idbPut('images', page.id+'__'+idx, file).catch(console.error);
-      });
-      pages.push(page);
-      if(firstId===null) firstId = page.id;
-    });
-    document.body.removeChild(mask);
-    batchFiles = []; batchBreaks = new Set();
-    renderPageList();
-    if(firstId) selectPage(firstId);
-    scheduleSave();
+  const closeBtn = document.createElement('button'); closeBtn.className='btn secondary small'; closeBtn.textContent='关闭';
+  closeBtn.onclick = ()=>{ hideBatchPreview(); document.body.removeChild(mask); };
+  const applyBtn = document.createElement('button'); applyBtn.className='btn small'; applyBtn.textContent='应用分页';
+  applyBtn.onclick = ()=>{
+    const n = applyBatchGrouping();
+    if(!n) return;
+    const summary = document.getElementById('batchSummary');
+    if(summary) summary.textContent = `已生成/更新 ${n} 页 —— 可以继续调整分页点,再次点"应用分页"。`;
   };
-  btnRow.appendChild(cancelBtn); btnRow.appendChild(confirmBtn);
+  btnRow.appendChild(closeBtn); btnRow.appendChild(applyBtn);
   modal.appendChild(btnRow);
   mask.appendChild(modal);
-  mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
+  mask.addEventListener('click',(e)=>{ if(e.target===mask){ hideBatchPreview(); document.body.removeChild(mask); } });
   document.body.appendChild(mask);
   document.getElementById('batchPickBtn').onclick = ()=>document.getElementById('batchFileInput').click();
   document.getElementById('autoGroupBtn').onclick = ()=>{

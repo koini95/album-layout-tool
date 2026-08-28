@@ -141,8 +141,10 @@
   .bt-moverow button{background:#00000099;color:#fff;border:none;width:19px;height:19px;border-radius:50%;
     font-size:10px;cursor:pointer;line-height:1;padding:0;}
   .bt-moverow button:disabled{opacity:.3;}
-  .bt-break{width:12px;align-self:stretch;flex:0 0 auto;border-radius:4px;cursor:pointer;background:#0000000f;}
-  .bt-break.active{background:var(--accent);}
+  .bt-break{width:20px;align-self:stretch;flex:0 0 auto;border-radius:4px;cursor:pointer;background:#0000000f;
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);}
+  .bt-break:hover{background:#00000022;}
+  .bt-break.active{background:var(--accent);color:#fff;}
   /* ---------- 移动端 ---------- */
   .mobile-topbar{display:none;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);
     border-bottom:1px solid var(--line);flex:0 0 auto;}
@@ -174,6 +176,7 @@
     .cell-clear,.cell-replace,.cell-blank-toggle{display:block;width:26px;height:26px;font-size:13px;}
     .cell-replace{right:32px;}
     .zoom-bar{display:flex;}
+    .bt-break{width:28px;font-size:14px;}
   }
 </style>
 </head>
@@ -1210,8 +1213,10 @@ function renderBatchThumbs(){
     wrap.appendChild(t);
     if(i < batchFiles.length-1){
       const brk = document.createElement('div');
-      brk.className = 'bt-break' + (batchBreaks.has(i)?' active':'');
-      brk.title = '点击切换分页点';
+      const isBreak = batchBreaks.has(i);
+      brk.className = 'bt-break' + (isBreak?' active':'');
+      brk.textContent = isBreak ? '✂' : '＋';
+      brk.title = isBreak ? '点击取消这个分页点' : '点击在此处分页';
       brk.onclick = ()=>{ if(batchBreaks.has(i)) batchBreaks.delete(i); else batchBreaks.add(i); renderBatchThumbs(); };
       wrap.appendChild(brk);
     }
@@ -1235,7 +1240,7 @@ function openBatchImport(){
       <label>每组张数</label><input id="batchGroupSize" type="number" min="1" value="4" style="width:60px;">
       <button class="btn secondary small" id="autoGroupBtn">按此张数自动分组</button>
     </div>
-    <div class="hint">◀▶ 调整叙事顺序;点击两张照片之间的细条,切/取消一个分页点;✕ 移除误选的照片。</div>
+    <div class="hint">◀▶ 调整叙事顺序;点击照片之间的 ＋ 添加分页点(变成 ✂,再点一下可取消)——每页张数可以不一样,不用都按固定张数分;✕ 移除误选的照片。</div>
     <div id="batchSummary" class="hint" style="font-weight:600;color:var(--ink);">还没有选择照片</div>
     <div id="batchThumbs" class="batch-thumbs"></div>
   `;

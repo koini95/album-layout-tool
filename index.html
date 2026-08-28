@@ -510,11 +510,13 @@ function renderPageList(){
   wrap.innerHTML = '';
   pages.forEach((p, i)=>{
     const filled = Object.keys(p.images).length;
+    const blankCount = countBlankLeaves(p.tree);
+    const neededSlots = p.count - blankCount;
     const el = document.createElement('div');
     el.className = 'page-item' + (p.id===currentPageId?' active':'');
     el.innerHTML = `
       <span class="idx">${String(i+1).padStart(3,'0')}</span>
-      <span class="meta">${p.count} 张${p.spacingOn?' · 留白':''}<small>${filled}/${p.count} 已放照片</small></span>
+      <span class="meta">${p.count} 张${p.spacingOn?' · 留白':''}<small>${filled}/${neededSlots} 已放照片${blankCount?` · ${blankCount} 格留白`:''}</small></span>
       <button class="icon-btn" data-act="up" title="上移">↑</button>
       <button class="icon-btn" data-act="down" title="下移">↓</button>
       <button class="icon-btn" data-act="del" title="删除">✕</button>
@@ -577,6 +579,10 @@ function swapPageImages(page, aId, bId){
 function findLeafNode(node, leafId){
   if(node.type === 'leaf') return node.id === leafId ? node : null;
   return findLeafNode(node.a, leafId) || findLeafNode(node.b, leafId);
+}
+function countBlankLeaves(node){
+  if(node.type === 'leaf') return node.blank ? 1 : 0;
+  return countBlankLeaves(node.a) + countBlankLeaves(node.b);
 }
 /* 把某个格子标记为"空白":不再提示上传照片,也不会自动把空间让给相邻格——
    要不要把空间给别的格子,由用户自己拖动分割线决定;想撤销就用"更换模板"整页重置 */

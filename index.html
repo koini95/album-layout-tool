@@ -92,7 +92,7 @@
     width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
   .cell-clear{right:4px;}
   .cell-replace{right:26px;font-size:10px;}
-  .cell-delete-frame{left:4px;background:#a8432fcc;font-size:10px;}
+  .cell-delete-frame{left:4px;background:#a8432fcc;}
   .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace,.cell-inner:hover .cell-delete-frame{display:block;}
   .zoom-bar{position:absolute;left:4px;right:4px;bottom:4px;display:none;align-items:center;gap:5px;
     background:#00000066;border-radius:14px;padding:3px 8px;z-index:4;}
@@ -756,7 +756,7 @@ function renderNode(node, page, interactive){
     }
     if(interactive){
       const deleteFrameBtn = document.createElement('button');
-      deleteFrameBtn.className = 'cell-delete-frame'; deleteFrameBtn.textContent = '🗑'; deleteFrameBtn.title = '删除这个照片框(相邻格会放大填满空出的位置)';
+      deleteFrameBtn.className = 'cell-delete-frame'; deleteFrameBtn.textContent = '✕'; deleteFrameBtn.title = '删除这个照片框(相邻格会放大填满空出的位置)';
       deleteFrameBtn.onclick = (e)=>{
         e.stopPropagation();
         if(!confirm('删除这个照片框?相邻的照片格会放大填满空出的位置。')) return;

@@ -67,6 +67,17 @@
   .switch input{accent-color:var(--accent);}
   .canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:30px;}
   .page-frame{background:#fff;box-shadow:0 4px 24px #0000001a;position:relative;}
+  .page-content{position:relative;}
+  .page-margin-handle{position:absolute;z-index:6;background:transparent;touch-action:none;}
+  .page-margin-handle.top{left:0;right:0;top:0;height:12px;margin-top:-6px;cursor:row-resize;}
+  .page-margin-handle.bottom{left:0;right:0;bottom:0;height:12px;margin-bottom:-6px;cursor:row-resize;}
+  .page-margin-handle.left{top:0;bottom:0;left:0;width:12px;margin-left:-6px;cursor:col-resize;}
+  .page-margin-handle.right{top:0;bottom:0;right:0;width:12px;margin-right:-6px;cursor:col-resize;}
+  .page-margin-handle:hover::after,.page-margin-handle.dragging::after{content:'';position:absolute;background:var(--accent);opacity:.55;}
+  .page-margin-handle.top:hover::after,.page-margin-handle.top.dragging::after,
+  .page-margin-handle.bottom:hover::after,.page-margin-handle.bottom.dragging::after{left:6px;right:6px;top:5px;bottom:5px;}
+  .page-margin-handle.left:hover::after,.page-margin-handle.left.dragging::after,
+  .page-margin-handle.right:hover::after,.page-margin-handle.right.dragging::after{top:6px;bottom:6px;left:5px;right:5px;}
   .split{display:flex;width:100%;height:100%;position:relative;}
   .split.row{flex-direction:column;}
   .split.col{flex-direction:row;}
@@ -169,6 +180,10 @@
     .canvas-wrap{padding:12px;}
     .divider.col{width:26px;margin-left:-13px;}
     .divider.row{height:26px;margin-top:-13px;}
+    .page-margin-handle.top{height:26px;margin-top:-13px;}
+    .page-margin-handle.bottom{height:26px;margin-bottom:-13px;}
+    .page-margin-handle.left{width:26px;margin-left:-13px;}
+    .page-margin-handle.right{width:26px;margin-right:-13px;}
     .cell-clear,.cell-replace,.cell-blank-toggle{width:26px;height:26px;font-size:13px;}
     .cell-replace{right:32px;}
     .zoom-bar{padding:6px 10px;bottom:6px;left:6px;right:6px;}
@@ -336,7 +351,7 @@ async function saveProjectMeta(){
     idSeq,
     currentPageId,
     pages: pages.map(p=>({
-      id:p.id, count:p.count, tree:p.tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM,
+      id:p.id, count:p.count, tree:p.tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM, marginMM:p.marginMM,
       images: Object.fromEntries(Object.entries(p.images).map(([k,v])=>[k,{scale:v.scale,panFracX:v.panFracX,panFracY:v.panFracY}]))
     }))
   };
@@ -365,7 +380,7 @@ async function restoreFromCache(){
   document.getElementById('bookDpi').value = book.dpi;
   pages = [];
   for(const pm of meta.pages){
-    const page = { id:pm.id, count:pm.count, tree:pm.tree, spacingOn:pm.spacingOn, spacingMM:pm.spacingMM, images:{} };
+    const page = { id:pm.id, count:pm.count, tree:pm.tree, spacingOn:pm.spacingOn, spacingMM:pm.spacingMM, marginMM:pm.marginMM || defaultMargin(), images:{} };
     for(const leafKey in (pm.images||{})){
       try{
         const blob = await idbGet('images', pm.id+'__'+leafKey);
@@ -430,10 +445,15 @@ function cloneTree(node){
 
 /* ---- 预设模板 ---- */
 const TEMPLATES = {
-  1: [ {name:'整页', tree:leaf()} ],
+  1: [
+    {name:'整页', tree:leaf()},
+    {name:'居中留白·上下多(Lightroom 风)', tree:leaf(), margin:{top:25,right:18,bottom:38,left:18}},
+    {name:'居中留白·四周相等', tree:leaf(), margin:{top:20,right:20,bottom:20,left:20}},
+  ],
   2: [
     {name:'左右对开', tree:split('col',0.5,leaf(),leaf())},
     {name:'上下对开', tree:split('row',0.5,leaf(),leaf())},
+    {name:'上下对开·留白边框', tree:split('row',0.5,leaf(),leaf()), margin:{top:15,right:15,bottom:15,left:15}},
   ],
   3: [
     {name:'左大右两小', tree:split('col',0.6,leaf(),split('row',0.5,leaf(),leaf()))},
@@ -447,6 +467,7 @@ const TEMPLATES = {
     {name:'一大三小(右)', tree:split('col',0.58,leaf(),equalGrid(3,1))},
     {name:'四等分·横条', tree:equalGrid(1,4)},
     {name:'四等分·竖条', tree:equalGrid(4,1)},
+    {name:'四宫格·留白边框', tree:equalGrid(2,2), margin:{top:15,right:15,bottom:15,left:15}},
   ],
   6: [
     {name:'2行3列', tree:equalGrid(2,3)},
@@ -464,10 +485,14 @@ function variantsFor(n){
 }
 
 /* ====================== 页面 CRUD ====================== */
-function addPage(count, treeTemplate){
+function defaultMargin(){ return { top:0, right:0, bottom:0, left:0 }; }
+function makePage(count, treeTemplate, margin){
   const tree = cloneTree(treeTemplate);
   assignIds(tree);
-  const page = { id: nextId(), count, tree, spacingOn:false, spacingMM:3, images:{} };
+  return { id: nextId(), count, tree, spacingOn:false, spacingMM:3, marginMM: margin ? {...margin} : defaultMargin(), images:{} };
+}
+function addPage(count, treeTemplate, margin){
+  const page = makePage(count, treeTemplate, margin);
   pages.push(page);
   selectPage(page.id);
   renderPageList();
@@ -494,7 +519,7 @@ function duplicatePage(id){
   const p = pages.find(x=>x.id===id);
   if(!p) return;
   const tree = cloneTree(p.tree);
-  const np = { id: nextId(), count:p.count, tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM, images:{} };
+  const np = { id: nextId(), count:p.count, tree, spacingOn:p.spacingOn, spacingMM:p.spacingMM, marginMM:{...p.marginMM}, images:{} };
   const idx = pages.findIndex(x=>x.id===id);
   pages.splice(idx+1,0,np);
   selectPage(np.id);
@@ -560,11 +585,68 @@ function renderEditor(){
   const frame = document.createElement('div');
   frame.className = 'page-frame';
   frame.style.width = w+'px'; frame.style.height = h+'px';
-  frame.appendChild(renderNode(page.tree, page, true));
+  frame.appendChild(renderPageFrameContent(page, true));
+  ['top','right','bottom','left'].forEach(side=>{
+    const handle = document.createElement('div');
+    handle.className = 'page-margin-handle ' + side;
+    handle.title = '拖动调整页面留白边框';
+    attachMarginDrag(handle, page, side);
+    frame.appendChild(handle);
+  });
   wrap.appendChild(frame);
 }
 
 function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
+
+/* 页面留白边距(mm→CSS%,借用 margin 百分比恒按容器宽度换算的规则,与照片间距 gapPct 用法一致) */
+function applyMarginStyles(contentWrap, page){
+  const m = page.marginMM || defaultMargin();
+  const pL = (m.left/book.widthMM)*100, pR = (m.right/book.widthMM)*100;
+  const pT = (m.top/book.widthMM)*100, pB = (m.bottom/book.widthMM)*100;
+  contentWrap.style.marginLeft = pL+'%'; contentWrap.style.marginRight = pR+'%';
+  contentWrap.style.marginTop = pT+'%'; contentWrap.style.marginBottom = pB+'%';
+  contentWrap.style.width = `calc(100% - ${pL+pR}%)`;
+  contentWrap.style.height = `calc(100% - ${pT+pB}%)`;
+}
+function renderPageFrameContent(page, interactive){
+  const contentWrap = document.createElement('div');
+  contentWrap.className = 'page-content';
+  applyMarginStyles(contentWrap, page);
+  contentWrap.appendChild(renderNode(page.tree, page, interactive));
+  return contentWrap;
+}
+function attachMarginDrag(handle, page, side){
+  handle.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    const frame = handle.closest('.page-frame');
+    const contentWrap = frame.querySelector('.page-content');
+    const frameRect = frame.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const startMM = page.marginMM[side];
+    const maxMM = (side==='top'||side==='bottom') ? book.heightMM*0.45 : book.widthMM*0.45;
+    function onMove(ev){
+      let deltaMM;
+      if(side==='top') deltaMM = (ev.clientY-startY)/frameRect.height*book.heightMM;
+      else if(side==='bottom') deltaMM = -(ev.clientY-startY)/frameRect.height*book.heightMM;
+      else if(side==='left') deltaMM = (ev.clientX-startX)/frameRect.width*book.widthMM;
+      else deltaMM = -(ev.clientX-startX)/frameRect.width*book.widthMM;
+      page.marginMM[side] = clamp(startMM+deltaMM, 0, maxMM);
+      applyMarginStyles(contentWrap, page);
+    }
+    function onUp(ev){
+      handle.classList.remove('dragging');
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      try{ handle.releasePointerCapture(ev.pointerId); }catch(err){}
+      renderEditor();
+      scheduleSave();
+    }
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+  });
+}
 
 /* 交换同一页内两个格子的照片(目标为空则等于移动过去) */
 function swapPageImages(page, aId, bId){
@@ -875,11 +957,11 @@ function openVariantModal(n){
     item.className = 'variant-item';
     const mini = document.createElement('div');
     mini.className = 'mini-tree';
-    mini.appendChild(renderMini(v.tree));
+    mini.appendChild(renderMini(v.tree, v.margin));
     const name = document.createElement('span');
     name.className = 'vname'; name.textContent = v.name;
     item.appendChild(mini); item.appendChild(name);
-    item.onclick = ()=>{ addPage(n, v.tree); document.body.removeChild(mask); };
+    item.onclick = ()=>{ addPage(n, v.tree, v.margin); document.body.removeChild(mask); };
     list.appendChild(item);
   });
   const closeBtn = document.createElement('button');
@@ -890,7 +972,21 @@ function openVariantModal(n){
   mask.addEventListener('click',(e)=>{ if(e.target===mask) document.body.removeChild(mask); });
   document.body.appendChild(mask);
 }
-function renderMini(node){
+function renderMini(node, margin){
+  if(margin){
+    const outer = document.createElement('div');
+    outer.style.cssText = 'width:100%;height:100%;background:#fff;box-sizing:border-box;';
+    const pT = clamp((margin.top||0)/book.widthMM*100, 0, 40);
+    const pR = clamp((margin.right||0)/book.widthMM*100, 0, 40);
+    const pB = clamp((margin.bottom||0)/book.widthMM*100, 0, 40);
+    const pL = clamp((margin.left||0)/book.widthMM*100, 0, 40);
+    outer.style.padding = `${pT}% ${pR}% ${pB}% ${pL}%`;
+    const inner = document.createElement('div');
+    inner.style.cssText = 'width:100%;height:100%;';
+    inner.appendChild(renderMini(node));
+    outer.appendChild(inner);
+    return outer;
+  }
   if(node.type==='leaf'){
     const d = document.createElement('div');
     d.style.cssText='width:100%;height:100%;background:#dedbd3;border:1px solid #fff;box-sizing:border-box;';
@@ -921,12 +1017,13 @@ function openVariantModalForReplace(n, page){
   const list = document.createElement('div'); list.className='variant-list';
   variants.forEach(v=>{
     const item=document.createElement('div'); item.className='variant-item';
-    const mini=document.createElement('div'); mini.className='mini-tree'; mini.appendChild(renderMini(v.tree));
+    const mini=document.createElement('div'); mini.className='mini-tree'; mini.appendChild(renderMini(v.tree, v.margin));
     const name=document.createElement('span'); name.className='vname'; name.textContent=v.name;
     item.appendChild(mini); item.appendChild(name);
     item.onclick=()=>{
       const tree = cloneTree(v.tree); assignIds(tree);
       page.tree = tree;
+      if(v.margin) page.marginMM = {...v.margin};
       document.body.removeChild(mask); renderEditor(); renderPageList();
       scheduleSave();
     };
@@ -976,8 +1073,10 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
   canvas.width = wPx; canvas.height = hPx;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,wPx,hPx);
+  const m = page.marginMM || defaultMargin();
+  const mLpx = m.left*pxPerMM, mRpx = m.right*pxPerMM, mTpx = m.top*pxPerMM, mBpx = m.bottom*pxPerMM;
   const rects = {};
-  computeRects(page.tree, 0, 0, wPx, hPx, rects);
+  computeRects(page.tree, mLpx, mTpx, wPx-mLpx-mRpx, hPx-mTpx-mBpx, rects);
   const blankMap = {};
   collectBlankMap(page.tree, blankMap);
   const gapPx = page.spacingOn ? page.spacingMM*pxPerMM : 0;
@@ -1151,7 +1250,7 @@ function openOverview(){
     frame.className = 'frame';
     frame.style.width = '100%';
     frame.style.aspectRatio = ratio;
-    frame.appendChild(renderNode(p.tree, p, false));
+    frame.appendChild(renderPageFrameContent(p, false));
     const label = document.createElement('div');
     label.className = 'label';
     label.textContent = `第 ${i+1} 页 · ${p.count} 张`;
@@ -1295,11 +1394,11 @@ function applyBatchGrouping(){
     const oldPage = oldTrackedPages[i];
     let pageObj;
     if(oldPage && n <= oldPage.count){
-      pageObj = { id: oldPage.id, count: oldPage.count, tree: oldPage.tree, spacingOn: oldPage.spacingOn, spacingMM: oldPage.spacingMM, images: {} };
+      pageObj = { id: oldPage.id, count: oldPage.count, tree: oldPage.tree, spacingOn: oldPage.spacingOn, spacingMM: oldPage.spacingMM, marginMM: {...oldPage.marginMM}, images: {} };
     } else {
       const tree = cloneTree(variantsFor(n)[0].tree);
       assignIds(tree);
-      pageObj = { id: oldPage ? oldPage.id : nextId(), count:n, tree, spacingOn: oldPage ? oldPage.spacingOn : false, spacingMM: oldPage ? oldPage.spacingMM : 3, images:{} };
+      pageObj = { id: oldPage ? oldPage.id : nextId(), count:n, tree, spacingOn: oldPage ? oldPage.spacingOn : false, spacingMM: oldPage ? oldPage.spacingMM : 3, marginMM: oldPage ? {...oldPage.marginMM} : defaultMargin(), images:{} };
     }
     const leafIds = collectLeafIdsSorted(pageObj.tree);
     files.forEach((file, idx)=>{

@@ -168,6 +168,12 @@
     .zoom-bar{padding:6px 10px;bottom:6px;left:6px;right:6px;}
     .modal{width:92vw;}
   }
+  /* 触屏设备没有 hover,格子上的操作按钮改为常驻显示,不需要先"悬停"才能点到 */
+  @media (hover:none){
+    .cell-clear,.cell-replace,.cell-delete-frame{display:block;width:26px;height:26px;font-size:13px;}
+    .cell-replace{right:32px;}
+    .zoom-bar{display:flex;}
+  }
 </style>
 </head>
 <body>

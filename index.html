@@ -88,11 +88,12 @@
   .drag-ghost{position:fixed;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:8px;overflow:hidden;
     pointer-events:none;z-index:200;box-shadow:0 6px 18px #00000055;border:2px solid #fff;opacity:.92;}
   .drag-ghost img{width:100%;height:100%;object-fit:cover;display:block;}
-  .cell-clear,.cell-replace{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
+  .cell-clear,.cell-replace,.cell-delete-frame{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
     width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
   .cell-clear{right:4px;}
   .cell-replace{right:26px;font-size:10px;}
-  .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace{display:block;}
+  .cell-delete-frame{left:4px;background:#a8432fcc;font-size:10px;}
+  .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace,.cell-inner:hover .cell-delete-frame{display:block;}
   .zoom-bar{position:absolute;left:4px;right:4px;bottom:4px;display:none;align-items:center;gap:5px;
     background:#00000066;border-radius:14px;padding:3px 8px;z-index:4;}
   .cell-inner:hover .zoom-bar{display:flex;}
@@ -162,7 +163,7 @@
     .canvas-wrap{padding:12px;}
     .divider.col{width:26px;margin-left:-13px;}
     .divider.row{height:26px;margin-top:-13px;}
-    .cell-clear,.cell-replace{width:26px;height:26px;font-size:13px;}
+    .cell-clear,.cell-replace,.cell-delete-frame{width:26px;height:26px;font-size:13px;}
     .cell-replace{right:32px;}
     .zoom-bar{padding:6px 10px;bottom:6px;left:6px;right:6px;}
     .modal{width:92vw;}
@@ -565,6 +566,33 @@ function swapPageImages(page, aId, bId){
   scheduleSave();
 }
 
+/* 从树中移除某个叶子格,其所在的 split 节点被"兄弟"节点取代,即兄弟格放大填满空出的位置 */
+function removeLeaf(node, leafId){
+  if(node.type === 'leaf'){
+    return node.id === leafId ? null : node;
+  }
+  const newA = removeLeaf(node.a, leafId);
+  if(newA === null) return node.b;
+  if(newA !== node.a) return { type:'split', dir:node.dir, ratio:node.ratio, a:newA, b:node.b };
+  const newB = removeLeaf(node.b, leafId);
+  if(newB === null) return node.a;
+  if(newB !== node.b) return { type:'split', dir:node.dir, ratio:node.ratio, a:node.a, b:newB };
+  return node;
+}
+function deleteFrame(page, leafId){
+  if(page.tree.type === 'leaf'){
+    alert('这是本页唯一的照片框,无法删除。如果想清空整页,可以直接删除该页。');
+    return;
+  }
+  page.tree = removeLeaf(page.tree, leafId);
+  if(page.images[leafId]){
+    delete page.images[leafId];
+    idbDelete('images', page.id+'__'+leafId).catch(console.error);
+  }
+  page.count = Math.max(1, page.count - 1);
+  renderEditor(); renderPageList(); scheduleSave();
+}
+
 /* 计算"覆盖式"填充下,图片在容器中的显示尺寸与位置(支持额外缩放 scale 与拖拽偏移 panFrac) */
 function coverGeom(containerW, containerH, mediaW, mediaH, userScale, panFracX, panFracY){
   const base = Math.max(containerW/mediaW, containerH/mediaH);
@@ -608,7 +636,7 @@ function renderNode(node, page, interactive){
       if(interactive){
         // 拖拽平移(支持鼠标与触屏);拖出格子边界则改为拖动照片去交换位置
         inner.addEventListener('pointerdown', (e)=>{
-          if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace')) return;
+          if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace') || e.target.closest('.cell-delete-frame')) return;
           e.preventDefault();
           const cw = inner.clientWidth, ch = inner.clientHeight;
           const nw = im.naturalWidth, nh = im.naturalHeight;
@@ -719,6 +747,16 @@ function renderNode(node, page, interactive){
       if(interactive){
         inner.onclick = ()=>{ leafClickTarget = {page, leafId:node.id}; document.getElementById('fileInput').click(); };
       }
+    }
+    if(interactive){
+      const deleteFrameBtn = document.createElement('button');
+      deleteFrameBtn.className = 'cell-delete-frame'; deleteFrameBtn.textContent = '🗑'; deleteFrameBtn.title = '删除这个照片框(相邻格会放大填满空出的位置)';
+      deleteFrameBtn.onclick = (e)=>{
+        e.stopPropagation();
+        if(!confirm('删除这个照片框?相邻的照片格会放大填满空出的位置。')) return;
+        deleteFrame(page, node.id);
+      };
+      inner.appendChild(deleteFrameBtn);
     }
     cell.appendChild(inner);
     return cell;

@@ -84,16 +84,18 @@
   .cell-inner.has-image{cursor:grab;touch-action:none;}
   .cell-inner.has-image:active{cursor:grabbing;}
   .cell-inner .empty-mark{font-size:11px;color:#b9b3a4;font-family:'IBM Plex Mono',monospace;text-align:center;}
+  .cell-inner.is-blank{background:#fff;cursor:default;}
   .cell-inner.drop-target{outline:3px solid var(--accent);outline-offset:-3px;background:var(--accent-soft);}
   .drag-ghost{position:fixed;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:8px;overflow:hidden;
     pointer-events:none;z-index:200;box-shadow:0 6px 18px #00000055;border:2px solid #fff;opacity:.92;}
   .drag-ghost img{width:100%;height:100%;object-fit:cover;display:block;}
-  .cell-clear,.cell-replace,.cell-delete-frame{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
+  .cell-clear,.cell-replace,.cell-blank-toggle{position:absolute;top:4px;background:#00000099;color:#fff;border:none;
     width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;display:none;line-height:1;z-index:3;}
   .cell-clear{right:4px;}
   .cell-replace{right:26px;font-size:10px;}
-  .cell-delete-frame{left:4px;background:#a8432fcc;}
-  .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace,.cell-inner:hover .cell-delete-frame{display:block;}
+  .cell-blank-toggle{left:4px;background:#a8432fcc;}
+  .cell-blank-toggle.restore{background:#2f5d50cc;}
+  .cell-inner:hover .cell-clear,.cell-inner:hover .cell-replace,.cell-inner:hover .cell-blank-toggle{display:block;}
   .zoom-bar{position:absolute;left:4px;right:4px;bottom:4px;display:none;align-items:center;gap:5px;
     background:#00000066;border-radius:14px;padding:3px 8px;z-index:4;}
   .cell-inner:hover .zoom-bar{display:flex;}
@@ -163,14 +165,14 @@
     .canvas-wrap{padding:12px;}
     .divider.col{width:26px;margin-left:-13px;}
     .divider.row{height:26px;margin-top:-13px;}
-    .cell-clear,.cell-replace,.cell-delete-frame{width:26px;height:26px;font-size:13px;}
+    .cell-clear,.cell-replace,.cell-blank-toggle{width:26px;height:26px;font-size:13px;}
     .cell-replace{right:32px;}
     .zoom-bar{padding:6px 10px;bottom:6px;left:6px;right:6px;}
     .modal{width:92vw;}
   }
   /* 触屏设备没有 hover,格子上的操作按钮改为常驻显示,不需要先"悬停"才能点到 */
   @media (hover:none){
-    .cell-clear,.cell-replace,.cell-delete-frame{display:block;width:26px;height:26px;font-size:13px;}
+    .cell-clear,.cell-replace,.cell-blank-toggle{display:block;width:26px;height:26px;font-size:13px;}
     .cell-replace{right:32px;}
     .zoom-bar{display:flex;}
   }
@@ -417,7 +419,7 @@ function assignIds(tree){
   return count;
 }
 function cloneTree(node){
-  if(node.type==='leaf') return { type:'leaf', id:node.id };
+  if(node.type==='leaf') return { type:'leaf', id:node.id, blank:!!node.blank };
   return { type:'split', dir:node.dir, ratio:node.ratio, a:cloneTree(node.a), b:cloneTree(node.b) };
 }
 
@@ -572,30 +574,21 @@ function swapPageImages(page, aId, bId){
   scheduleSave();
 }
 
-/* 从树中移除某个叶子格,其所在的 split 节点被"兄弟"节点取代,即兄弟格放大填满空出的位置 */
-function removeLeaf(node, leafId){
-  if(node.type === 'leaf'){
-    return node.id === leafId ? null : node;
-  }
-  const newA = removeLeaf(node.a, leafId);
-  if(newA === null) return node.b;
-  if(newA !== node.a) return { type:'split', dir:node.dir, ratio:node.ratio, a:newA, b:node.b };
-  const newB = removeLeaf(node.b, leafId);
-  if(newB === null) return node.a;
-  if(newB !== node.b) return { type:'split', dir:node.dir, ratio:node.ratio, a:node.a, b:newB };
-  return node;
+/* 在树中查找指定 id 的叶子节点(返回引用) */
+function findLeafNode(node, leafId){
+  if(node.type === 'leaf') return node.id === leafId ? node : null;
+  return findLeafNode(node.a, leafId) || findLeafNode(node.b, leafId);
 }
-function deleteFrame(page, leafId){
-  if(page.tree.type === 'leaf'){
-    alert('这是本页唯一的照片框,无法删除。如果想清空整页,可以直接删除该页。');
-    return;
-  }
-  page.tree = removeLeaf(page.tree, leafId);
-  if(page.images[leafId]){
+/* 把某个格子标记为"空白":不再提示上传照片,也不会自动把空间让给相邻格——
+   要不要把空间给别的格子,由用户自己拖动分割线决定 */
+function setLeafBlank(page, leafId, blank){
+  const leafNode = findLeafNode(page.tree, leafId);
+  if(!leafNode) return;
+  leafNode.blank = blank;
+  if(blank && page.images[leafId]){
     delete page.images[leafId];
     idbDelete('images', page.id+'__'+leafId).catch(console.error);
   }
-  page.count = Math.max(1, page.count - 1);
   renderEditor(); renderPageList(); scheduleSave();
 }
 
@@ -642,7 +635,7 @@ function renderNode(node, page, interactive){
       if(interactive){
         // 拖拽平移(支持鼠标与触屏);拖出格子边界则改为拖动照片去交换位置
         inner.addEventListener('pointerdown', (e)=>{
-          if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace') || e.target.closest('.cell-delete-frame')) return;
+          if(e.target.closest('.zoom-bar') || e.target.closest('.cell-clear') || e.target.closest('.cell-replace') || e.target.closest('.cell-blank-toggle')) return;
           e.preventDefault();
           const cw = inner.clientWidth, ch = inner.clientHeight;
           const nw = im.naturalWidth, nh = im.naturalHeight;
@@ -745,6 +738,8 @@ function renderNode(node, page, interactive){
         zoomBar.appendChild(resetBtn); zoomBar.appendChild(slider);
         inner.appendChild(zoomBar);
       }
+    } else if(node.blank){
+      inner.classList.add('is-blank');
     } else {
       const mark = document.createElement('span');
       mark.className = 'empty-mark'; mark.textContent = '点击上传\n#'+(node.id+1);
@@ -755,14 +750,21 @@ function renderNode(node, page, interactive){
       }
     }
     if(interactive){
-      const deleteFrameBtn = document.createElement('button');
-      deleteFrameBtn.className = 'cell-delete-frame'; deleteFrameBtn.textContent = '✕'; deleteFrameBtn.title = '删除这个照片框(相邻格会放大填满空出的位置)';
-      deleteFrameBtn.onclick = (e)=>{
-        e.stopPropagation();
-        if(!confirm('删除这个照片框?相邻的照片格会放大填满空出的位置。')) return;
-        deleteFrame(page, node.id);
-      };
-      inner.appendChild(deleteFrameBtn);
+      if(node.blank && !imgData){
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'cell-blank-toggle restore'; restoreBtn.textContent = '↺'; restoreBtn.title = '恢复此格(重新显示上传照片提示)';
+        restoreBtn.onclick = (e)=>{ e.stopPropagation(); setLeafBlank(page, node.id, false); };
+        inner.appendChild(restoreBtn);
+      } else {
+        const blankBtn = document.createElement('button');
+        blankBtn.className = 'cell-blank-toggle'; blankBtn.textContent = '✕'; blankBtn.title = '标记为空白(不再提示上传照片;相邻格不会自动放大,如需更大空间可手动拖动分割线)';
+        blankBtn.onclick = (e)=>{
+          e.stopPropagation();
+          if(imgData && !confirm('把这个照片框标记为空白?照片会被移除。\n(相邻格不会自动放大,如需更大空间可以手动拖动分割线。)')) return;
+          setLeafBlank(page, node.id, true);
+        };
+        inner.appendChild(blankBtn);
+      }
     }
     cell.appendChild(inner);
     return cell;
@@ -959,6 +961,10 @@ function loadImageElement(url){
     el.src = url;
   });
 }
+function collectBlankMap(node, out){
+  if(node.type==='leaf'){ out[node.id] = !!node.blank; return; }
+  collectBlankMap(node.a, out); collectBlankMap(node.b, out);
+}
 async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
   const canvas = document.createElement('canvas');
   canvas.width = wPx; canvas.height = hPx;
@@ -966,6 +972,8 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,wPx,hPx);
   const rects = {};
   computeRects(page.tree, 0, 0, wPx, hPx, rects);
+  const blankMap = {};
+  collectBlankMap(page.tree, blankMap);
   const gapPx = page.spacingOn ? page.spacingMM*pxPerMM : 0;
   for(const leafId in rects){
     const r = rects[leafId];
@@ -976,10 +984,11 @@ async function renderPageToCanvas(page, wPx, hPx, pxPerMM){
       const g = coverGeom(rw, rh, el.naturalWidth, el.naturalHeight, img.scale, img.panFracX, img.panFracY);
       const sx = -g.left/g.scale, sy = -g.top/g.scale, sw = rw/g.scale, sh = rh/g.scale;
       ctx.drawImage(el, sx, sy, sw, sh, rx, ry, rw, rh);
-    } else {
+    } else if(!blankMap[leafId]){
       ctx.fillStyle = '#e4e1d9';
       ctx.fillRect(rx,ry,rw,rh);
     }
+    // 标记为空白的格子:不填色,保留画布本身的白底
   }
   return canvas;
 }
